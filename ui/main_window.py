@@ -1,9 +1,11 @@
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QIcon
 from qfluentwidgets import FluentWindow, NavigationItemPosition, setTheme, Theme
 from qfluentwidgets import FluentIcon as FIF
 
 from core.adb_fastboot import ADBFastbootManager, load_config
 from core.device_monitor import DeviceMonitor
+from core.resources import first_existing_resource
 from ui.pages.dashboard_page import DashboardPage
 from ui.pages.edl_page import EdlPage
 from ui.pages.settings_page import SettingsPage
@@ -24,6 +26,12 @@ class MainWindow(FluentWindow):
 
         # Window
         self.setWindowTitle("DeadZone Flash Tool")
+        icon_path = first_existing_resource(
+            "assets/icons/deadzone_logo.ico",
+            "assets/icons/deadzone_logo.png",
+        )
+        if icon_path:
+            self.setWindowIcon(QIcon(icon_path))
         self.resize(1150, 750)
         self.setMinimumSize(950, 620)
         screen = QApplication.primaryScreen().availableGeometry()

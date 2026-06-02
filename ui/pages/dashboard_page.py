@@ -2,6 +2,7 @@ import os
 import time
 from datetime import datetime
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFileDialog,
                              QTextEdit, QFrame, QLabel, QGridLayout, QScrollArea,
                              QSizePolicy)
@@ -12,6 +13,7 @@ from core.adb_fastboot import ADBFastbootManager
 from core.flash_worker import FlashWorker
 from ui.styles import Styles
 from core.device_monitor import DeviceMonitor
+from core.resources import first_existing_resource
 
 
 # Partitions that must NOT receive the _a/_b suffix
@@ -112,7 +114,33 @@ class DashboardPage(QWidget):
         left_layout.setContentsMargins(24, 20, 12, 20)
         left_layout.setSpacing(14)
 
-        left_layout.addWidget(TitleLabel("Dashboard"))
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        logo = QLabel()
+        logo_path = first_existing_resource(
+            "assets/icons/deadzone_logo.png",
+            "assets/icons/deadzone_logo.ico",
+        )
+        if logo_path:
+            pixmap = QPixmap(logo_path)
+            if not pixmap.isNull():
+                logo.setPixmap(pixmap.scaled(
+                    40, 40,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                ))
+                logo.setFixedSize(44, 44)
+                logo.setStyleSheet("background: transparent;")
+                header.addWidget(logo)
+        title_col = QVBoxLayout()
+        title_col.setSpacing(0)
+        title_col.addWidget(TitleLabel("Dashboard"))
+        developer = BodyLabel("Developer: MEZO")
+        developer.setStyleSheet("font-size: 12px; color: #888;")
+        title_col.addWidget(developer)
+        header.addLayout(title_col)
+        header.addStretch()
+        left_layout.addLayout(header)
 
         # ─── 1. Device status ───
         self.status_frame = QFrame()

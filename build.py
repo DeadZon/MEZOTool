@@ -24,7 +24,7 @@ import platform
 # ── Configuration ──
 APP_NAME = "DeadZone"
 ENTRY = "app.py"
-ICON_WIN = None     # Set the .ico icon path if available, e.g. "assets/icon.ico"
+ICON_WIN = os.path.join("assets", "icons", "deadzone_logo.ico")
 ICON_MAC = None     # Set the .icns icon path if available
 VERSION = "1.0.0"
 
@@ -83,6 +83,10 @@ def build_command(onefile=False):
         cmd += ["--icon", ICON_MAC]
 
     # ── Collect data: qfluentwidgets resources ──
+    if os.path.isdir(os.path.join(ROOT, "assets")):
+        sep = ";" if os_name == 'windows' else ":"
+        cmd += ["--add-data", f"assets{sep}assets"]
+
     qfw_path = find_package_path("qfluentwidgets")
     if qfw_path:
         sep = ";" if os_name == 'windows' else ":"

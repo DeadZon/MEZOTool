@@ -1,12 +1,15 @@
 import os
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFileDialog
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QLabel
 from qfluentwidgets import (ScrollArea, SettingCardGroup, PushSettingCard,
                             SettingCard, ComboBox, InfoBar, InfoBarPosition,
-                            ProgressBar, TitleLabel, BodyLabel, Theme, setTheme,
+                            ProgressBar, TitleLabel, BodyLabel, SubtitleLabel,
+                            SimpleCardWidget, Theme, setTheme,
                             FluentIcon as FIF)
 from core.adb_fastboot import ADBFastbootManager, load_config, save_config
 from core.downloader import PlatformToolsDownloader
+from core.resources import first_existing_resource
 
 
 class SettingsPage(ScrollArea):
@@ -36,6 +39,37 @@ class SettingsPage(ScrollArea):
         layout.setSpacing(24)
 
         layout.addWidget(TitleLabel("Settings"))
+
+        brand_card = SimpleCardWidget()
+        brand_layout = QHBoxLayout(brand_card)
+        brand_layout.setContentsMargins(16, 14, 16, 14)
+        brand_layout.setSpacing(14)
+
+        logo = QLabel()
+        logo_path = first_existing_resource(
+            "assets/icons/deadzone_logo_black_bg.png",
+            "assets/icons/deadzone_logo.png",
+            "assets/icons/deadzone_logo.ico",
+        )
+        if logo_path:
+            pixmap = QPixmap(logo_path)
+            if not pixmap.isNull():
+                logo.setPixmap(pixmap.scaled(
+                    56, 56,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                ))
+                logo.setFixedSize(60, 60)
+                logo.setStyleSheet("background: transparent;")
+                brand_layout.addWidget(logo)
+
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(2)
+        brand_text.addWidget(SubtitleLabel("DeadZone Flash Tool"))
+        brand_text.addWidget(BodyLabel("Developed by MEZO"))
+        brand_layout.addLayout(brand_text)
+        brand_layout.addStretch()
+        layout.addWidget(brand_card)
 
         config = load_config()
 

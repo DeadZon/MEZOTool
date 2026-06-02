@@ -91,7 +91,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          python -m PyInstaller --noconfirm --onefile --name DeadZone --noconsole --add-data "${{ steps.qfw.outputs.path }}${{ matrix.separator }}qfluentwidgets" --add-data "${{ steps.dd.outputs.path }}${{ matrix.separator }}darkdetect" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import PyQt6.QtSvg --hidden-import PyQt6.QtSvgWidgets --hidden-import qfluentwidgets --hidden-import darkdetect --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module doctest --exclude-module lib2to3 --exclude-module matplotlib --exclude-module numpy --exclude-module pandas --exclude-module scipy app.py
+          python -m PyInstaller --noconfirm --onefile --name DeadZone --noconsole --icon assets/icons/deadzone_logo.ico --add-data "assets${{ matrix.separator }}assets" --add-data "${{ steps.qfw.outputs.path }}${{ matrix.separator }}qfluentwidgets" --add-data "${{ steps.dd.outputs.path }}${{ matrix.separator }}darkdetect" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import PyQt6.QtSvg --hidden-import PyQt6.QtSvgWidgets --hidden-import qfluentwidgets --hidden-import darkdetect --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module doctest --exclude-module lib2to3 --exclude-module matplotlib --exclude-module numpy --exclude-module pandas --exclude-module scipy app.py
 
       # Download platform-tools for each OS
       - name: Download platform-tools
