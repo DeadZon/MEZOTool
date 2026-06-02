@@ -18,9 +18,16 @@ class PlatformToolsDownloader(QThread):
 
     # OS-specific URLs
     URLS = {
-        "windows": "https://dl.google.com/android/repository/platform-tools_r35.0.2-windows.zip",
-        "linux":   "https://dl.google.com/android/repository/platform-tools_r35.0.2-linux.zip",
-        "darwin":  "https://dl.google.com/android/repository/platform-tools_r35.0.2-darwin.zip",
+        "windows": [
+            "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
+            "https://dl-ssl.google.com/android/repository/platform-tools-latest-windows.zip",
+        ],
+        "linux": [
+            "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
+        ],
+        "darwin": [
+            "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",
+        ],
     }
 
     def __init__(self, dest_dir="."):
@@ -51,7 +58,7 @@ class PlatformToolsDownloader(QThread):
         else:
             return "Linux"
 
-    def _download_with_retries(self, req, zip_path, os_label, attempts=3):
+    def _download_with_retries(self, url, req, zip_path, os_label, attempts_log, attempts=3):
         last_error = None
         for attempt in range(1, attempts + 1):
             if self._is_cancelled:
@@ -89,9 +96,11 @@ class PlatformToolsDownloader(QThread):
 
                 if not os.path.isfile(zip_path) or os.path.getsize(zip_path) <= 0:
                     raise RuntimeError("Downloaded Platform Tools archive is missing or empty.")
+                attempts_log.append((url, "OK"))
                 return True
             except urllib.error.HTTPError as e:
                 last_error = e
+                attempts_log.append((url, f"HTTP {e.code}: {e.reason}"))
                 logging.warning(
                     "Platform Tools download HTTP %s on attempt %s/%s: %s",
                     e.code, attempt, attempts, e.reason
@@ -102,6 +111,7 @@ class PlatformToolsDownloader(QThread):
                     )
             except Exception as e:
                 last_error = e
+                attempts_log.append((url, f"ERROR: {e}"))
                 logging.warning(
                     "Platform Tools download failed on attempt %s/%s: %s",
                     attempt, attempts, e
@@ -117,14 +127,20 @@ class PlatformToolsDownloader(QThread):
             raise last_error
         return None
 
+    @staticmethod
+    def _attempted_urls_message(attempts_log):
+        lines = ["Attempted Platform Tools URLs:"]
+        lines.extend(f"- {url}: {status}" for url, status in attempts_log)
+        return "\n".join(lines)
+
     def run(self):
         os_key = self._get_os_key()
-        url = self.URLS.get(os_key)
-        if not url:
+        urls = self.URLS.get(os_key)
+        if not urls:
             self.finished_signal.emit(False, f"Unsupported operating system: {sys.platform}")
             return
 
-        zip_path = os.path.join(self.dest_dir, f"platform-tools-r35.0.2-{os_key}.zip")
+        zip_path = os.path.join(self.dest_dir, f"platform-tools-latest-{os_key}.zip")
         os_label = self._get_os_label()
         local_pt_path = os.path.join(self.dest_dir, "platform-tools")
         adb_name = "adb.exe" if sys.platform == 'win32' else "adb"
@@ -146,9 +162,36 @@ class PlatformToolsDownloader(QThread):
                 "darwin":  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
                 "linux":   "Mozilla/5.0 (X11; Linux x86_64)",
             }
-            req = urllib.request.Request(url, headers={'User-Agent': ua.get(os_key, ua["linux"])})
+            attempts_log = []
+            downloaded = False
+            for url in urls:
+                req = urllib.request.Request(url, headers={'User-Agent': ua.get(os_key, ua["linux"])})
+                try:
+                    downloaded = self._download_with_retries(
+                        url, req, zip_path, os_label, attempts_log
+                    )
+                except Exception:
+                    downloaded = False
+                if downloaded:
+                    break
 
-            if not self._download_with_retries(req, zip_path, os_label):
+            if not downloaded:
+                if self._is_cancelled:
+                    self.status_signal.emit("Download cancelled.")
+                    self.finished_signal.emit(False, "Download cancelled by the user.")
+                    return
+                raise RuntimeError(
+                    "Required Platform Tools archive could not be downloaded.\n"
+                    + self._attempted_urls_message(attempts_log)
+                )
+
+            if not os.path.isfile(zip_path) or os.path.getsize(zip_path) <= 0:
+                raise RuntimeError(
+                    "Downloaded Platform Tools archive is missing or empty.\n"
+                    + self._attempted_urls_message(attempts_log)
+                )
+
+            if self._is_cancelled:
                 self.status_signal.emit("Download cancelled.")
                 self.finished_signal.emit(False, "Download cancelled by the user.")
                 return

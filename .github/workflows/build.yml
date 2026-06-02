@@ -2,7 +2,7 @@ name: Build DeadZone Flash Tool
 
 env:
   SCRCPY_VERSION: v3.3.4
-  PLATFORM_TOOLS_VERSION: 35.0.2
+  PLATFORM_TOOLS_CACHE_VERSION: latest
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
           - os: windows-latest
             artifact_name: DeadZone-Windows
             exe_name: DeadZone.exe
-            platform_tools_url: https://dl.google.com/android/repository/platform-tools_r35.0.2-windows.zip
+            platform_tools_urls: https://dl.google.com/android/repository/platform-tools-latest-windows.zip https://dl-ssl.google.com/android/repository/platform-tools-latest-windows.zip
             scrcpy_arch: win64
             scrcpy_ext: zip
             separator: ";"
@@ -31,7 +31,7 @@ jobs:
           - os: ubuntu-latest
             artifact_name: DeadZone-Linux
             exe_name: DeadZone
-            platform_tools_url: https://dl.google.com/android/repository/platform-tools_r35.0.2-linux.zip
+            platform_tools_urls: https://dl.google.com/android/repository/platform-tools-latest-linux.zip
             scrcpy_arch: linux-x86_64
             scrcpy_ext: tar.gz
             separator: ":"
@@ -39,7 +39,7 @@ jobs:
           - os: macos-latest
             artifact_name: DeadZone-macOS-arm64
             exe_name: DeadZone
-            platform_tools_url: https://dl.google.com/android/repository/platform-tools_r35.0.2-darwin.zip
+            platform_tools_urls: https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
             scrcpy_arch: macos-aarch64
             scrcpy_ext: tar.gz
             separator: ":"
@@ -47,7 +47,7 @@ jobs:
           - os: macos-15-intel
             artifact_name: DeadZone-macOS-x64
             exe_name: DeadZone
-            platform_tools_url: https://dl.google.com/android/repository/platform-tools_r35.0.2-darwin.zip
+            platform_tools_urls: https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
             scrcpy_arch: macos-x86_64
             scrcpy_ext: tar.gz
             separator: ":"
@@ -72,7 +72,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ci-cache
-          key: tools-${{ runner.os }}-${{ matrix.scrcpy_arch }}-platform-tools-${{ env.PLATFORM_TOOLS_VERSION }}-scrcpy-${{ env.SCRCPY_VERSION }}
+          key: tools-${{ runner.os }}-${{ matrix.scrcpy_arch }}-platform-tools-${{ env.PLATFORM_TOOLS_CACHE_VERSION }}-scrcpy-${{ env.SCRCPY_VERSION }}
 
       # Linux: install required GUI libraries
       - name: Install Linux GUI deps
@@ -216,16 +216,17 @@ jobs:
           import urllib.request
           import zipfile
 
-          url = "${{ matrix.platform_tools_url }}"
+          urls = "${{ matrix.platform_tools_urls }}".split()
           cache_dir = os.path.join(".ci-cache", "platform-tools")
           os.makedirs(cache_dir, exist_ok=True)
-          zip_path = os.path.join(cache_dir, os.path.basename(url))
+          zip_path = os.path.join(cache_dir, f"platform-tools-latest-{os.name}.zip")
           adb_name = "adb.exe" if os.name == "nt" else "adb"
           fastboot_name = "fastboot.exe" if os.name == "nt" else "fastboot"
           required_files = [
               os.path.join("dist", "platform-tools", adb_name),
               os.path.join("dist", "platform-tools", fastboot_name),
           ]
+          attempts_log = []
 
           def download_with_retries(download_url, output_path, attempts=3):
               headers = {"User-Agent": "DeadZone-CI"}
@@ -240,17 +241,31 @@ jobs:
                               shutil.copyfileobj(response, target)
                       if os.path.getsize(output_path) <= 0:
                           raise RuntimeError(f"Downloaded file is empty: {output_path}")
+                      attempts_log.append((download_url, "OK"))
                       return True
                   except urllib.error.HTTPError as exc:
+                      attempts_log.append((download_url, f"HTTP {exc.code}: {exc.reason}"))
                       print(f"WARNING: HTTP {exc.code} while downloading {download_url}: {exc.reason}")
                       if exc.code == 403:
                           print("WARNING: rate limit or access denial encountered; retrying platform-tools download.")
                   except Exception as exc:
+                      attempts_log.append((download_url, f"ERROR: {exc}"))
                       print(f"WARNING: download failed: {exc}")
                   if os.path.exists(output_path):
                       os.remove(output_path)
                   if attempt < attempts:
                       time.sleep(5 * attempt)
+              return False
+
+          def attempted_urls_message():
+              lines = ["Attempted platform-tools URLs:"]
+              lines.extend(f"- {url}: {status}" for url, status in attempts_log)
+              return "\n".join(lines)
+
+          def download_any(output_path):
+              for candidate_url in urls:
+                  if download_with_retries(candidate_url, output_path):
+                      return True
               return False
 
           def extracted_files_exist():
@@ -261,8 +276,11 @@ jobs:
               raise SystemExit(0)
 
           if not os.path.isfile(zip_path) or os.path.getsize(zip_path) <= 0:
-              if not download_with_retries(url, zip_path):
-                  raise RuntimeError(f"Required platform-tools archive could not be downloaded: {url}")
+              if not download_any(zip_path):
+                  raise RuntimeError(
+                      "Required platform-tools archive could not be downloaded.\n"
+                      + attempted_urls_message()
+                  )
           else:
               print(f"Using cached {zip_path}")
 
@@ -280,8 +298,11 @@ jobs:
                   print(f"WARNING: platform-tools validation failed on attempt {attempt}/3: {exc}")
                   if os.path.exists(zip_path):
                       os.remove(zip_path)
-                  if attempt >= 3 or not download_with_retries(url, zip_path):
-                      raise RuntimeError(f"Required platform-tools files are still missing after retries: {required_files}") from exc
+                  if attempt >= 3 or not download_any(zip_path):
+                      raise RuntimeError(
+                          f"Required platform-tools files are still missing after retries: {required_files}\n"
+                          + attempted_urls_message()
+                      ) from exc
 
       # Download pinned scrcpy release asset for each OS.
       - name: Download scrcpy
