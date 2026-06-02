@@ -1,5 +1,9 @@
 name: Build DeadZone Flash Tool
 
+env:
+  SCRCPY_VERSION: v3.3.4
+  PLATFORM_TOOLS_VERSION: 35.0.2
+
 on:
   push:
     tags:
@@ -19,7 +23,7 @@ jobs:
           - os: windows-latest
             artifact_name: DeadZone-Windows
             exe_name: DeadZone.exe
-            platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-windows.zip
+            platform_tools_url: https://dl.google.com/android/repository/platform-tools_r35.0.2-windows.zip
             scrcpy_arch: win64
             scrcpy_ext: zip
             separator: ";"
@@ -27,7 +31,7 @@ jobs:
           - os: ubuntu-latest
             artifact_name: DeadZone-Linux
             exe_name: DeadZone
-            platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-linux.zip
+            platform_tools_url: https://dl.google.com/android/repository/platform-tools_r35.0.2-linux.zip
             scrcpy_arch: linux-x86_64
             scrcpy_ext: tar.gz
             separator: ":"
@@ -35,7 +39,7 @@ jobs:
           - os: macos-latest
             artifact_name: DeadZone-macOS-arm64
             exe_name: DeadZone
-            platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
+            platform_tools_url: https://dl.google.com/android/repository/platform-tools_r35.0.2-darwin.zip
             scrcpy_arch: macos-aarch64
             scrcpy_ext: tar.gz
             separator: ":"
@@ -43,7 +47,7 @@ jobs:
           - os: macos-15-intel
             artifact_name: DeadZone-macOS-x64
             exe_name: DeadZone
-            platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
+            platform_tools_url: https://dl.google.com/android/repository/platform-tools_r35.0.2-darwin.zip
             scrcpy_arch: macos-x86_64
             scrcpy_ext: tar.gz
             separator: ":"
@@ -63,6 +67,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install PyQt6 PyQt6-Fluent-Widgets darkdetect pyinstaller
+
+      - name: Cache downloaded tools
+        uses: actions/cache@v4
+        with:
+          path: .ci-cache
+          key: tools-${{ runner.os }}-${{ matrix.scrcpy_arch }}-platform-tools-${{ env.PLATFORM_TOOLS_VERSION }}-scrcpy-${{ env.SCRCPY_VERSION }}
 
       # Linux: install required GUI libraries
       - name: Install Linux GUI deps
@@ -199,94 +209,147 @@ jobs:
       - name: Download platform-tools
         shell: python
         run: |
-          import urllib.request, zipfile, os
-          url = "${{ matrix.platform_tools_url }}"
-          zip_path = "platform-tools.zip"
-          print(f"Downloading {url}...")
-          urllib.request.urlretrieve(url, zip_path)
-          with zipfile.ZipFile(zip_path, 'r') as z:
-              z.extractall("dist")
-          os.remove(zip_path)
-          print("Done!")
+          import os
+          import shutil
+          import time
+          import urllib.error
+          import urllib.request
+          import zipfile
 
-      # Download the latest scrcpy for each OS; use tag_name to build the exact filename
+          url = "${{ matrix.platform_tools_url }}"
+          cache_dir = os.path.join(".ci-cache", "platform-tools")
+          os.makedirs(cache_dir, exist_ok=True)
+          zip_path = os.path.join(cache_dir, os.path.basename(url))
+
+          def download_with_retries(download_url, output_path, attempts=3):
+              headers = {"User-Agent": "DeadZone-CI"}
+              for attempt in range(1, attempts + 1):
+                  try:
+                      print(f"Downloading {download_url} (attempt {attempt}/{attempts})...")
+                      req = urllib.request.Request(download_url, headers=headers)
+                      with urllib.request.urlopen(req, timeout=60) as response:
+                          with open(output_path, "wb") as target:
+                              shutil.copyfileobj(response, target)
+                      return True
+                  except urllib.error.HTTPError as exc:
+                      print(f"WARNING: HTTP {exc.code} while downloading {download_url}: {exc.reason}")
+                      if exc.code == 403:
+                          print("WARNING: rate limit or access denial encountered; platform-tools will be skipped.")
+                  except Exception as exc:
+                      print(f"WARNING: download failed: {exc}")
+                  if attempt < attempts:
+                      time.sleep(5 * attempt)
+              return False
+
+          if not os.path.isfile(zip_path):
+              if not download_with_retries(url, zip_path):
+                  print("WARNING: platform-tools download failed; continuing without bundled platform-tools.")
+                  raise SystemExit(0)
+          else:
+              print(f"Using cached {zip_path}")
+
+          try:
+              with zipfile.ZipFile(zip_path, 'r') as z:
+                  z.extractall("dist")
+              print("platform-tools extracted.")
+          except Exception as exc:
+              print(f"WARNING: platform-tools extraction failed: {exc}; continuing without bundled platform-tools.")
+
+      # Download pinned scrcpy release asset for each OS. This is optional.
       - name: Download scrcpy
         shell: python
         env:
-          GH_TOKEN: ${{ secrets.TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          import urllib.request, json, os, zipfile, tarfile, shutil
+          import os
+          import shutil
+          import tarfile
+          import time
+          import urllib.error
+          import urllib.request
+          import zipfile
 
           arch = "${{ matrix.scrcpy_arch }}"
           ext = "${{ matrix.scrcpy_ext }}"
+          version = "${{ env.SCRCPY_VERSION }}"
           token = os.environ.get("GH_TOKEN", "")
+          cache_dir = os.path.join(".ci-cache", "scrcpy")
+          os.makedirs(cache_dir, exist_ok=True)
 
-          # Get the latest release from the GitHub API
-          api_url = "https://api.github.com/repos/Genymobile/scrcpy/releases/latest"
-          headers = {"User-Agent": "DeadZone-CI"}
-          if token:
-              headers["Authorization"] = f"Bearer {token}"
-          req = urllib.request.Request(api_url, headers=headers)
-          with urllib.request.urlopen(req) as resp:
-              release = json.loads(resp.read().decode())
-
-          tag = release.get("tag_name", "")
-          print(f"Scrcpy latest tag: {tag}")
-
-          # Build the filename from tag_name: scrcpy-{arch}-{tag}.{ext}
-          # Example: scrcpy-win64-v4.0.zip, scrcpy-macos-aarch64-v4.0.tar.gz
           if ext == "tar.gz":
-              asset_name = f"scrcpy-{arch}-{tag}.tar.gz"
+              asset_name = f"scrcpy-{arch}-{version}.tar.gz"
           else:
-              asset_name = f"scrcpy-{arch}-{tag}.{ext}"
+              asset_name = f"scrcpy-{arch}-{version}.{ext}"
 
-          # Find the asset in the release
-          download_url = None
-          for asset in release.get("assets", []):
-              if asset["name"] == asset_name:
-                  download_url = asset["browser_download_url"]
-                  break
+          download_url = f"https://github.com/Genymobile/scrcpy/releases/download/{version}/{asset_name}"
+          asset_path = os.path.join(cache_dir, asset_name)
 
-          if not download_url:
-              print(f"WARNING: Asset not found: '{asset_name}'")
-              print(f"Available assets: {[a['name'] for a in release.get('assets', [])]}")
-              # Do not fail the build; scrcpy is optional
-              exit(0)
+          def download_with_retries(download_url, output_path, attempts=3):
+              headers = {"User-Agent": "DeadZone-CI"}
+              # Token is optional. Direct public release assets do not require the GitHub API.
+              # It is included only to make rate-limit/access-denial responses easier to diagnose.
+              if token:
+                  headers["Authorization"] = f"Bearer {token}"
+              for attempt in range(1, attempts + 1):
+                  try:
+                      print(f"Downloading {download_url} (attempt {attempt}/{attempts})...")
+                      req = urllib.request.Request(download_url, headers=headers)
+                      with urllib.request.urlopen(req, timeout=60) as response:
+                          with open(output_path, "wb") as target:
+                              shutil.copyfileobj(response, target)
+                      return True
+                  except urllib.error.HTTPError as exc:
+                      print(f"WARNING: HTTP {exc.code} while downloading {download_url}: {exc.reason}")
+                      if exc.code == 403:
+                          print("WARNING: GitHub returned 403; scrcpy is optional and will be skipped.")
+                  except Exception as exc:
+                      print(f"WARNING: download failed: {exc}")
+                  if attempt < attempts:
+                      time.sleep(5 * attempt)
+              return False
 
-          print(f"Downloading {asset_name}...")
-          urllib.request.urlretrieve(download_url, asset_name)
+          if not os.path.isfile(asset_path):
+              if not download_with_retries(download_url, asset_path):
+                  print("WARNING: scrcpy download failed; continuing without bundled scrcpy.")
+                  raise SystemExit(0)
+          else:
+              print(f"Using cached {asset_path}")
 
-          # Extract
           scrcpy_dir = os.path.join("dist", "scrcpy")
           os.makedirs(scrcpy_dir, exist_ok=True)
 
-          if ext == "zip":
-              with zipfile.ZipFile(asset_name, 'r') as z:
-                  for member in z.namelist():
-                      filename = os.path.basename(member)
-                      if not filename:
-                          continue
-                      with z.open(member) as source:
-                          with open(os.path.join(scrcpy_dir, filename), "wb") as target:
-                              shutil.copyfileobj(source, target)
-          else:
-              with tarfile.open(asset_name, 'r:gz') as tar:
-                  for member in tar.getmembers():
-                      if member.isfile():
-                          member.name = os.path.basename(member.name)
-                          tar.extract(member, scrcpy_dir)
-
-          os.remove(asset_name)
-          print(f"Scrcpy {tag} extracted to dist/scrcpy/")
-          print(f"Files: {os.listdir(scrcpy_dir)}")
+          try:
+              if ext == "zip":
+                  with zipfile.ZipFile(asset_path, 'r') as z:
+                      for member in z.namelist():
+                          filename = os.path.basename(member)
+                          if not filename:
+                              continue
+                          with z.open(member) as source:
+                              with open(os.path.join(scrcpy_dir, filename), "wb") as target:
+                                  shutil.copyfileobj(source, target)
+              else:
+                  with tarfile.open(asset_path, 'r:gz') as tar:
+                      for member in tar.getmembers():
+                          if member.isfile():
+                              member.name = os.path.basename(member.name)
+                              tar.extract(member, scrcpy_dir)
+              print(f"Scrcpy {version} extracted to dist/scrcpy/")
+              print(f"Files: {os.listdir(scrcpy_dir)}")
+          except Exception as exc:
+              print(f"WARNING: scrcpy extraction failed: {exc}; continuing without bundled scrcpy.")
 
       # Linux/macOS: chmod +x
       - name: Set executable permissions
         if: runner.os != 'Windows'
         run: |
           chmod +x dist/${{ matrix.exe_name }}
-          chmod +x dist/platform-tools/adb
-          chmod +x dist/platform-tools/fastboot
+          if [ -f dist/platform-tools/adb ]; then
+            chmod +x dist/platform-tools/adb
+          fi
+          if [ -f dist/platform-tools/fastboot ]; then
+            chmod +x dist/platform-tools/fastboot
+          fi
           if [ -f dist/scrcpy/scrcpy ]; then
             chmod +x dist/scrcpy/scrcpy
           fi

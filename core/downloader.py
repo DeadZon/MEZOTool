@@ -1,6 +1,8 @@
 import os
 import sys
 import platform
+import time
+import urllib.error
 import urllib.request
 import zipfile
 import logging
@@ -48,6 +50,38 @@ class PlatformToolsDownloader(QThread):
         else:
             return "Linux"
 
+    def _open_url_with_retries(self, req, attempts=3):
+        last_error = None
+        for attempt in range(1, attempts + 1):
+            if self._is_cancelled:
+                return None
+            try:
+                return urllib.request.urlopen(req, timeout=60)
+            except urllib.error.HTTPError as e:
+                last_error = e
+                logging.warning(
+                    "Platform Tools download HTTP %s on attempt %s/%s: %s",
+                    e.code, attempt, attempts, e.reason
+                )
+                if e.code == 403:
+                    self.status_signal.emit(
+                        "Download was blocked by the server. Retrying..."
+                    )
+            except Exception as e:
+                last_error = e
+                logging.warning(
+                    "Platform Tools download failed on attempt %s/%s: %s",
+                    attempt, attempts, e
+                )
+            if attempt < attempts:
+                self.status_signal.emit(
+                    f"Download failed. Retrying ({attempt + 1}/{attempts})..."
+                )
+                time.sleep(2 * attempt)
+        if last_error:
+            raise last_error
+        return None
+
     def run(self):
         os_key = self._get_os_key()
         url = self.URLS.get(os_key)
@@ -72,7 +106,13 @@ class PlatformToolsDownloader(QThread):
             }
             req = urllib.request.Request(url, headers={'User-Agent': ua.get(os_key, ua["linux"])})
 
-            with urllib.request.urlopen(req) as response:
+            response = self._open_url_with_retries(req)
+            if response is None:
+                self.status_signal.emit("Download cancelled.")
+                self.finished_signal.emit(False, "Download cancelled by the user.")
+                return
+
+            with response:
                 total_size = int(response.info().get('Content-Length', 0))
                 downloaded = 0
                 block_size = 8192
