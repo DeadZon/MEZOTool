@@ -25,7 +25,7 @@ import platform
 APP_NAME = "DeadZone"
 ENTRY = "app.py"
 ICON_WIN = os.path.join("assets", "icons", "deadzone_logo.ico")
-ICON_MAC = None     # Set the .icns icon path if available
+ICON_MAC = os.path.join("assets", "icons", "deadzone_logo.icns")
 VERSION = "1.0.0"
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -53,6 +53,15 @@ def find_package_path(package_name):
         return None
 
 
+def get_icon_path(os_name):
+    """Return a PyInstaller-safe icon path for the current platform."""
+    if os_name == 'windows':
+        return ICON_WIN if os.path.isfile(os.path.join(ROOT, ICON_WIN)) else None
+    if os_name == 'macos':
+        return ICON_MAC if os.path.isfile(os.path.join(ROOT, ICON_MAC)) else None
+    return None
+
+
 def build_command(onefile=False):
     """Build the PyInstaller command."""
     os_name = get_os()
@@ -77,10 +86,9 @@ def build_command(onefile=False):
         cmd.append("--windowed")   # .app bundle on macOS
 
     # ── Icon ──
-    if os_name == 'windows' and ICON_WIN and os.path.isfile(ICON_WIN):
-        cmd += ["--icon", ICON_WIN]
-    elif os_name == 'macos' and ICON_MAC and os.path.isfile(ICON_MAC):
-        cmd += ["--icon", ICON_MAC]
+    icon_path = get_icon_path(os_name)
+    if icon_path:
+        cmd += ["--icon", icon_path]
 
     # ── Collect data: qfluentwidgets resources ──
     if os.path.isdir(os.path.join(ROOT, "assets")):

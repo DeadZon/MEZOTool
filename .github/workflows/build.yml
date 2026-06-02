@@ -3,7 +3,7 @@ name: Build DeadZone Flash Tool
 on:
   push:
     tags:
-      - 'v*'           # Auto build khi push tag vd: v1.0.0
+      - 'v*'           # Automatically build when pushing a tag, e.g. v1.0.0
   workflow_dispatch:     # Allow manual runs from the GitHub UI
     inputs:
       release_tag:
@@ -89,9 +89,111 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write(f"path={path}\n")
 
-      - name: Build with PyInstaller
+      - name: Generate macOS icon
+        if: runner.os == 'macOS'
         run: |
-          python -m PyInstaller --noconfirm --onefile --name DeadZone --noconsole --icon assets/icons/deadzone_logo.ico --add-data "assets${{ matrix.separator }}assets" --add-data "${{ steps.qfw.outputs.path }}${{ matrix.separator }}qfluentwidgets" --add-data "${{ steps.dd.outputs.path }}${{ matrix.separator }}darkdetect" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import PyQt6.QtSvg --hidden-import PyQt6.QtSvgWidgets --hidden-import qfluentwidgets --hidden-import darkdetect --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module doctest --exclude-module lib2to3 --exclude-module matplotlib --exclude-module numpy --exclude-module pandas --exclude-module scipy app.py
+          ICON_DIR="assets/icons"
+          ICNS_PATH="${ICON_DIR}/deadzone_logo.icns"
+          ICONSET_PATH="${ICON_DIR}/deadzone_logo.iconset"
+          SOURCE_PNG=""
+
+          if [ -f "$ICNS_PATH" ]; then
+            echo "Using existing ${ICNS_PATH}"
+            exit 0
+          fi
+
+          if [ -f "${ICON_DIR}/deadzone_logo_1024.png" ]; then
+            SOURCE_PNG="${ICON_DIR}/deadzone_logo_1024.png"
+          elif [ -f "${ICON_DIR}/deadzone_logo.png" ]; then
+            SOURCE_PNG="${ICON_DIR}/deadzone_logo.png"
+          else
+            echo "No PNG source found for macOS icon; building without an icon."
+            exit 0
+          fi
+
+          rm -rf "$ICONSET_PATH"
+          mkdir -p "$ICONSET_PATH"
+
+          make_icon() {
+            size="$1"
+            name="$2"
+            if ! sips -z "$size" "$size" "$SOURCE_PNG" --out "${ICONSET_PATH}/${name}" >/dev/null; then
+              echo "WARNING: failed to generate ${name}; building without an icon."
+              rm -rf "$ICONSET_PATH"
+              exit 0
+            fi
+          }
+
+          make_icon 16 icon_16x16.png
+          make_icon 32 icon_16x16@2x.png
+          make_icon 32 icon_32x32.png
+          make_icon 64 icon_32x32@2x.png
+          make_icon 128 icon_128x128.png
+          make_icon 256 icon_128x128@2x.png
+          make_icon 256 icon_256x256.png
+          make_icon 512 icon_256x256@2x.png
+          make_icon 512 icon_512x512.png
+          make_icon 1024 icon_512x512@2x.png
+
+          if iconutil -c icns "$ICONSET_PATH" -o "$ICNS_PATH"; then
+            echo "Generated ${ICNS_PATH}"
+          else
+            echo "WARNING: iconutil failed; building without an icon."
+          fi
+          rm -rf "$ICONSET_PATH"
+
+      - name: Build with PyInstaller
+        shell: python
+        env:
+          QFW_PATH: ${{ steps.qfw.outputs.path }}
+          DD_PATH: ${{ steps.dd.outputs.path }}
+          DATA_SEPARATOR: ${{ matrix.separator }}
+        run: |
+          import os
+          import subprocess
+          import sys
+
+          sep = os.environ["DATA_SEPARATOR"]
+          cmd = [
+              sys.executable, "-m", "PyInstaller",
+              "--noconfirm", "--onefile", "--name", "DeadZone", "--noconsole",
+          ]
+
+          if sys.platform == "win32":
+              icon = "assets/icons/deadzone_logo.ico"
+              if os.path.isfile(icon):
+                  cmd += ["--icon", icon]
+          elif sys.platform == "darwin":
+              icon = "assets/icons/deadzone_logo.icns"
+              if os.path.isfile(icon):
+                  cmd += ["--icon", icon]
+
+          if os.path.isdir("assets"):
+              cmd += ["--add-data", f"assets{sep}assets"]
+
+          cmd += [
+              "--add-data", f"{os.environ['QFW_PATH']}{sep}qfluentwidgets",
+              "--add-data", f"{os.environ['DD_PATH']}{sep}darkdetect",
+              "--hidden-import", "PyQt6.QtCore",
+              "--hidden-import", "PyQt6.QtGui",
+              "--hidden-import", "PyQt6.QtWidgets",
+              "--hidden-import", "PyQt6.QtSvg",
+              "--hidden-import", "PyQt6.QtSvgWidgets",
+              "--hidden-import", "qfluentwidgets",
+              "--hidden-import", "darkdetect",
+              "--exclude-module", "tkinter",
+              "--exclude-module", "unittest",
+              "--exclude-module", "pydoc",
+              "--exclude-module", "doctest",
+              "--exclude-module", "lib2to3",
+              "--exclude-module", "matplotlib",
+              "--exclude-module", "numpy",
+              "--exclude-module", "pandas",
+              "--exclude-module", "scipy",
+              "app.py",
+          ]
+          print(" ".join(cmd))
+          subprocess.check_call(cmd)
 
       # Download platform-tools for each OS
       - name: Download platform-tools
