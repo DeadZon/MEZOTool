@@ -1,6 +1,7 @@
 import os
 import sys
 import platform
+import shutil
 import time
 import urllib.error
 import urllib.request
@@ -17,9 +18,9 @@ class PlatformToolsDownloader(QThread):
 
     # OS-specific URLs
     URLS = {
-        "windows": "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
-        "linux":   "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
-        "darwin":  "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",
+        "windows": "https://dl.google.com/android/repository/platform-tools_r35.0.2-windows.zip",
+        "linux":   "https://dl.google.com/android/repository/platform-tools_r35.0.2-linux.zip",
+        "darwin":  "https://dl.google.com/android/repository/platform-tools_r35.0.2-darwin.zip",
     }
 
     def __init__(self, dest_dir="."):
@@ -50,13 +51,45 @@ class PlatformToolsDownloader(QThread):
         else:
             return "Linux"
 
-    def _open_url_with_retries(self, req, attempts=3):
+    def _download_with_retries(self, req, zip_path, os_label, attempts=3):
         last_error = None
         for attempt in range(1, attempts + 1):
             if self._is_cancelled:
-                return None
+                return False
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
             try:
-                return urllib.request.urlopen(req, timeout=60)
+                with urllib.request.urlopen(req, timeout=60) as response:
+                    total_size = int(response.info().get('Content-Length', 0))
+                    downloaded = 0
+                    block_size = 8192
+
+                    self.status_signal.emit(
+                        f"Downloading Platform Tools for {os_label} (~8MB)..."
+                    )
+
+                    with open(zip_path, 'wb') as out_file:
+                        while True:
+                            if self._is_cancelled:
+                                out_file.close()
+                                if os.path.exists(zip_path):
+                                    os.remove(zip_path)
+                                return False
+
+                            buffer = response.read(block_size)
+                            if not buffer:
+                                break
+
+                            downloaded += len(buffer)
+                            out_file.write(buffer)
+
+                            if total_size > 0:
+                                percent = int(downloaded * 100 / total_size)
+                                self.progress_signal.emit(percent)
+
+                if not os.path.isfile(zip_path) or os.path.getsize(zip_path) <= 0:
+                    raise RuntimeError("Downloaded Platform Tools archive is missing or empty.")
+                return True
             except urllib.error.HTTPError as e:
                 last_error = e
                 logging.warning(
@@ -73,6 +106,8 @@ class PlatformToolsDownloader(QThread):
                     "Platform Tools download failed on attempt %s/%s: %s",
                     attempt, attempts, e
                 )
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
             if attempt < attempts:
                 self.status_signal.emit(
                     f"Download failed. Retrying ({attempt + 1}/{attempts})..."
@@ -89,8 +124,15 @@ class PlatformToolsDownloader(QThread):
             self.finished_signal.emit(False, f"Unsupported operating system: {sys.platform}")
             return
 
-        zip_path = os.path.join(self.dest_dir, f"platform-tools-latest-{os_key}.zip")
+        zip_path = os.path.join(self.dest_dir, f"platform-tools-r35.0.2-{os_key}.zip")
         os_label = self._get_os_label()
+        local_pt_path = os.path.join(self.dest_dir, "platform-tools")
+        adb_name = "adb.exe" if sys.platform == 'win32' else "adb"
+        fastboot_name = "fastboot.exe" if sys.platform == 'win32' else "fastboot"
+        required_files = [
+            os.path.join(local_pt_path, adb_name),
+            os.path.join(local_pt_path, fastboot_name),
+        ]
 
         try:
             if not os.path.exists(self.dest_dir):
@@ -106,53 +148,33 @@ class PlatformToolsDownloader(QThread):
             }
             req = urllib.request.Request(url, headers={'User-Agent': ua.get(os_key, ua["linux"])})
 
-            response = self._open_url_with_retries(req)
-            if response is None:
+            if not self._download_with_retries(req, zip_path, os_label):
                 self.status_signal.emit("Download cancelled.")
                 self.finished_signal.emit(False, "Download cancelled by the user.")
                 return
-
-            with response:
-                total_size = int(response.info().get('Content-Length', 0))
-                downloaded = 0
-                block_size = 8192
-
-                self.status_signal.emit(
-                    f"Downloading Platform Tools for {os_label} (~8MB)...")
-
-                with open(zip_path, 'wb') as out_file:
-                    while True:
-                        if self._is_cancelled:
-                            out_file.close()
-                            if os.path.exists(zip_path):
-                                os.remove(zip_path)
-                            self.status_signal.emit("Download cancelled.")
-                            self.finished_signal.emit(False, "Download cancelled by the user.")
-                            return
-
-                        buffer = response.read(block_size)
-                        if not buffer:
-                            break
-
-                        downloaded += len(buffer)
-                        out_file.write(buffer)
-
-                        if total_size > 0:
-                            percent = int(downloaded * 100 / total_size)
-                            self.progress_signal.emit(percent)
 
             # Extract
             self.status_signal.emit("Download complete. Extracting...")
             self.progress_signal.emit(95)
 
+            if os.path.isdir(local_pt_path):
+                shutil.rmtree(local_pt_path)
+
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(self.dest_dir)
+
+            missing = [path for path in required_files if not os.path.isfile(path)]
+            if missing:
+                if os.path.isdir(local_pt_path):
+                    shutil.rmtree(local_pt_path)
+                raise RuntimeError(
+                    "Platform Tools extraction is incomplete. Missing: "
+                    + ", ".join(os.path.basename(path) for path in missing)
+                )
 
             # Remove temporary zip file
             if os.path.exists(zip_path):
                 os.remove(zip_path)
-
-            local_pt_path = os.path.join(self.dest_dir, "platform-tools")
 
             # On Linux/macOS: chmod +x for adb and fastboot
             if sys.platform != 'win32':

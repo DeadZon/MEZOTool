@@ -220,42 +220,70 @@ jobs:
           cache_dir = os.path.join(".ci-cache", "platform-tools")
           os.makedirs(cache_dir, exist_ok=True)
           zip_path = os.path.join(cache_dir, os.path.basename(url))
+          adb_name = "adb.exe" if os.name == "nt" else "adb"
+          fastboot_name = "fastboot.exe" if os.name == "nt" else "fastboot"
+          required_files = [
+              os.path.join("dist", "platform-tools", adb_name),
+              os.path.join("dist", "platform-tools", fastboot_name),
+          ]
 
           def download_with_retries(download_url, output_path, attempts=3):
               headers = {"User-Agent": "DeadZone-CI"}
               for attempt in range(1, attempts + 1):
+                  if os.path.exists(output_path):
+                      os.remove(output_path)
                   try:
                       print(f"Downloading {download_url} (attempt {attempt}/{attempts})...")
                       req = urllib.request.Request(download_url, headers=headers)
                       with urllib.request.urlopen(req, timeout=60) as response:
                           with open(output_path, "wb") as target:
                               shutil.copyfileobj(response, target)
+                      if os.path.getsize(output_path) <= 0:
+                          raise RuntimeError(f"Downloaded file is empty: {output_path}")
                       return True
                   except urllib.error.HTTPError as exc:
                       print(f"WARNING: HTTP {exc.code} while downloading {download_url}: {exc.reason}")
                       if exc.code == 403:
-                          print("WARNING: rate limit or access denial encountered; platform-tools will be skipped.")
+                          print("WARNING: rate limit or access denial encountered; retrying platform-tools download.")
                   except Exception as exc:
                       print(f"WARNING: download failed: {exc}")
+                  if os.path.exists(output_path):
+                      os.remove(output_path)
                   if attempt < attempts:
                       time.sleep(5 * attempt)
               return False
 
-          if not os.path.isfile(zip_path):
+          def extracted_files_exist():
+              return all(os.path.isfile(path) for path in required_files)
+
+          if extracted_files_exist():
+              print("platform-tools already extracted.")
+              raise SystemExit(0)
+
+          if not os.path.isfile(zip_path) or os.path.getsize(zip_path) <= 0:
               if not download_with_retries(url, zip_path):
-                  print("WARNING: platform-tools download failed; continuing without bundled platform-tools.")
-                  raise SystemExit(0)
+                  raise RuntimeError(f"Required platform-tools archive could not be downloaded: {url}")
           else:
               print(f"Using cached {zip_path}")
 
-          try:
-              with zipfile.ZipFile(zip_path, 'r') as z:
-                  z.extractall("dist")
-              print("platform-tools extracted.")
-          except Exception as exc:
-              print(f"WARNING: platform-tools extraction failed: {exc}; continuing without bundled platform-tools.")
+          for attempt in range(1, 4):
+              shutil.rmtree(os.path.join("dist", "platform-tools"), ignore_errors=True)
+              try:
+                  with zipfile.ZipFile(zip_path, 'r') as z:
+                      z.extractall("dist")
+                  if extracted_files_exist():
+                      print("platform-tools extracted and validated.")
+                      break
+                  missing = [path for path in required_files if not os.path.isfile(path)]
+                  raise RuntimeError(f"Missing required platform-tools files: {missing}")
+              except Exception as exc:
+                  print(f"WARNING: platform-tools validation failed on attempt {attempt}/3: {exc}")
+                  if os.path.exists(zip_path):
+                      os.remove(zip_path)
+                  if attempt >= 3 or not download_with_retries(url, zip_path):
+                      raise RuntimeError(f"Required platform-tools files are still missing after retries: {required_files}") from exc
 
-      # Download pinned scrcpy release asset for each OS. This is optional.
+      # Download pinned scrcpy release asset for each OS.
       - name: Download scrcpy
         shell: python
         env:
@@ -283,6 +311,8 @@ jobs:
 
           download_url = f"https://github.com/Genymobile/scrcpy/releases/download/{version}/{asset_name}"
           asset_path = os.path.join(cache_dir, asset_name)
+          scrcpy_exe = "scrcpy.exe" if os.name == "nt" else "scrcpy"
+          required_files = [os.path.join("dist", "scrcpy", scrcpy_exe)]
 
           def download_with_retries(download_url, output_path, attempts=3):
               headers = {"User-Agent": "DeadZone-CI"}
@@ -291,53 +321,76 @@ jobs:
               if token:
                   headers["Authorization"] = f"Bearer {token}"
               for attempt in range(1, attempts + 1):
+                  if os.path.exists(output_path):
+                      os.remove(output_path)
                   try:
                       print(f"Downloading {download_url} (attempt {attempt}/{attempts})...")
                       req = urllib.request.Request(download_url, headers=headers)
                       with urllib.request.urlopen(req, timeout=60) as response:
                           with open(output_path, "wb") as target:
                               shutil.copyfileobj(response, target)
+                      if os.path.getsize(output_path) <= 0:
+                          raise RuntimeError(f"Downloaded file is empty: {output_path}")
                       return True
                   except urllib.error.HTTPError as exc:
                       print(f"WARNING: HTTP {exc.code} while downloading {download_url}: {exc.reason}")
                       if exc.code == 403:
-                          print("WARNING: GitHub returned 403; scrcpy is optional and will be skipped.")
+                          print("WARNING: GitHub returned 403; retrying scrcpy download.")
                   except Exception as exc:
                       print(f"WARNING: download failed: {exc}")
+                  if os.path.exists(output_path):
+                      os.remove(output_path)
                   if attempt < attempts:
                       time.sleep(5 * attempt)
               return False
 
-          if not os.path.isfile(asset_path):
+          def extracted_files_exist():
+              return all(os.path.isfile(path) for path in required_files)
+
+          if extracted_files_exist():
+              print("scrcpy already extracted.")
+              raise SystemExit(0)
+
+          if not os.path.isfile(asset_path) or os.path.getsize(asset_path) <= 0:
               if not download_with_retries(download_url, asset_path):
-                  print("WARNING: scrcpy download failed; continuing without bundled scrcpy.")
-                  raise SystemExit(0)
+                  raise RuntimeError(f"Required scrcpy archive could not be downloaded: {download_url}")
           else:
               print(f"Using cached {asset_path}")
 
           scrcpy_dir = os.path.join("dist", "scrcpy")
           os.makedirs(scrcpy_dir, exist_ok=True)
 
-          try:
-              if ext == "zip":
-                  with zipfile.ZipFile(asset_path, 'r') as z:
-                      for member in z.namelist():
-                          filename = os.path.basename(member)
-                          if not filename:
-                              continue
-                          with z.open(member) as source:
-                              with open(os.path.join(scrcpy_dir, filename), "wb") as target:
-                                  shutil.copyfileobj(source, target)
-              else:
-                  with tarfile.open(asset_path, 'r:gz') as tar:
-                      for member in tar.getmembers():
-                          if member.isfile():
-                              member.name = os.path.basename(member.name)
-                              tar.extract(member, scrcpy_dir)
-              print(f"Scrcpy {version} extracted to dist/scrcpy/")
-              print(f"Files: {os.listdir(scrcpy_dir)}")
-          except Exception as exc:
-              print(f"WARNING: scrcpy extraction failed: {exc}; continuing without bundled scrcpy.")
+          for attempt in range(1, 4):
+              shutil.rmtree(scrcpy_dir, ignore_errors=True)
+              os.makedirs(scrcpy_dir, exist_ok=True)
+              try:
+                  if ext == "zip":
+                      with zipfile.ZipFile(asset_path, 'r') as z:
+                          for member in z.namelist():
+                              filename = os.path.basename(member)
+                              if not filename:
+                                  continue
+                              with z.open(member) as source:
+                                  with open(os.path.join(scrcpy_dir, filename), "wb") as target:
+                                      shutil.copyfileobj(source, target)
+                  else:
+                      with tarfile.open(asset_path, 'r:gz') as tar:
+                          for member in tar.getmembers():
+                              if member.isfile():
+                                  member.name = os.path.basename(member.name)
+                                  tar.extract(member, scrcpy_dir)
+                  if extracted_files_exist():
+                      print(f"Scrcpy {version} extracted and validated in dist/scrcpy/")
+                      print(f"Files: {os.listdir(scrcpy_dir)}")
+                      break
+                  missing = [path for path in required_files if not os.path.isfile(path)]
+                  raise RuntimeError(f"Missing required scrcpy files: {missing}")
+              except Exception as exc:
+                  print(f"WARNING: scrcpy validation failed on attempt {attempt}/3: {exc}")
+                  if os.path.exists(asset_path):
+                      os.remove(asset_path)
+                  if attempt >= 3 or not download_with_retries(download_url, asset_path):
+                      raise RuntimeError(f"Required scrcpy files are still missing after retries: {required_files}") from exc
 
       # Linux/macOS: chmod +x
       - name: Set executable permissions
