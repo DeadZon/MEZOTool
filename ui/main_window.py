@@ -23,7 +23,7 @@ class MainWindow(FluentWindow):
         setTheme(t)
 
         # Window
-        self.setWindowTitle("NT Flash Tools")
+        self.setWindowTitle("MEZO Flash Tool")
         self.resize(1150, 750)
         self.setMinimumSize(950, 620)
         screen = QApplication.primaryScreen().availableGeometry()
@@ -39,12 +39,12 @@ class MainWindow(FluentWindow):
         self.settings = SettingsPage(self.manager, self)
         self.settings.settings_changed.connect(self._on_settings)
 
-        self.addSubInterface(self.dashboard, FIF.HOME, "Bảng điều khiển")
+        self.addSubInterface(self.dashboard, FIF.HOME, "Dashboard")
         self.addSubInterface(self.edl, FIF.DEVELOPER_TOOLS, "EDL Flash")
         self.addSubInterface(self.terminal, FIF.COMMAND_PROMPT, "Terminal")
         self.addSubInterface(self.scrcpy, FIF.PHONE, "Scrcpy")
         self.addSubInterface(self.driver, FIF.CONNECT, "USB Driver")
-        self.addSubInterface(self.settings, FIF.SETTING, "Cài đặt",
+        self.addSubInterface(self.settings, FIF.SETTING, "Settings",
                            NavigationItemPosition.BOTTOM)
 
         # Monitor
@@ -52,7 +52,7 @@ class MainWindow(FluentWindow):
         self.monitor.devices_signal.connect(self._on_devices)
         self.monitor.start()
 
-        # Gắn monitor vào dashboard để pause/resume khi flash
+        # Attach the monitor to the dashboard so it can pause/resume during flashing
         self.dashboard.set_monitor(self.monitor)
 
     def _on_devices(self, devices):
@@ -75,7 +75,7 @@ class MainWindow(FluentWindow):
             self.dashboard.worker.cancel()
             self.dashboard.worker.wait(2000)
 
-        # Cleanup các trang mới
+        # Clean up pages
         self.terminal.cleanup()
         self.scrcpy.cleanup()
         self.edl.cleanup()

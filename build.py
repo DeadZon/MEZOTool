@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-NT Flash Tools — Build Script (Cross-platform)
+MEZO Flash Tool — Build Script (Cross-platform)
 ================================================
-Đóng gói ứng dụng thành file thực thi cho Windows, Linux, macOS.
+Package the application into executables for Windows, Linux, and macOS.
 
-Cách dùng:
-    python build.py              # Build mặc định (one-folder)
-    python build.py --onefile    # Build thành 1 file duy nhất
-    python build.py --clean      # Xóa thư mục build cũ trước khi build
+Usage:
+    python build.py              # Default build (one-folder)
+    python build.py --onefile    # Build as a single file
+    python build.py --clean      # Remove old build directories before building
 
-Yêu cầu:
+Requirements:
     pip install pyinstaller
 """
 
@@ -20,11 +20,11 @@ import subprocess
 import platform
 
 
-# ── Cấu hình ──
+# ── Configuration ──
 APP_NAME = "NTFlashTools"
 ENTRY = "app.py"
-ICON_WIN = None     # Đặt path icon .ico nếu có, vd: "assets/icon.ico"
-ICON_MAC = None     # Đặt path icon .icns nếu có
+ICON_WIN = None     # Set the .ico icon path if available, e.g. "assets/icon.ico"
+ICON_MAC = None     # Set the .icns icon path if available
 VERSION = "1.0.0"
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -43,7 +43,7 @@ def get_os():
 
 
 def find_package_path(package_name):
-    """Tìm đường dẫn package đã cài trong site-packages."""
+    """Find the installed package path in site-packages."""
     try:
         mod = __import__(package_name)
         pkg_dir = os.path.dirname(mod.__file__)
@@ -53,7 +53,7 @@ def find_package_path(package_name):
 
 
 def build_command(onefile=False):
-    """Tạo câu lệnh PyInstaller."""
+    """Build the PyInstaller command."""
     os_name = get_os()
     cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -69,11 +69,11 @@ def build_command(onefile=False):
     else:
         cmd.append("--onedir")
 
-    # ── Ẩn console ──
+    # ── Hide console ──
     if os_name == 'windows':
-        cmd.append("--noconsole")  # Ẩn CMD trên Windows
+        cmd.append("--noconsole")  # Hide CMD on Windows
     elif os_name == 'macos':
-        cmd.append("--windowed")   # .app bundle trên macOS
+        cmd.append("--windowed")   # .app bundle on macOS
 
     # ── Icon ──
     if os_name == 'windows' and ICON_WIN and os.path.isfile(ICON_WIN):
@@ -81,25 +81,25 @@ def build_command(onefile=False):
     elif os_name == 'macos' and ICON_MAC and os.path.isfile(ICON_MAC):
         cmd += ["--icon", ICON_MAC]
 
-    # ── Thu thập data: qfluentwidgets resources ──
+    # ── Collect data: qfluentwidgets resources ──
     qfw_path = find_package_path("qfluentwidgets")
     if qfw_path:
         sep = ";" if os_name == 'windows' else ":"
         cmd += ["--add-data", f"{qfw_path}{sep}qfluentwidgets"]
 
-    # ── Thu thập darkdetect ──
+    # ── Collect darkdetect ──
     dd_path = find_package_path("darkdetect")
     if dd_path:
         sep = ";" if os_name == 'windows' else ":"
         cmd += ["--add-data", f"{dd_path}{sep}darkdetect"]
 
-    # ── Thu thập edlclient (tích hợp EDL tool) ──
+    # ── Collect edlclient (integrated EDL tool) ──
     edl_path = find_package_path("edlclient")
     if edl_path:
         sep = ";" if os_name == 'windows' else ":"
         cmd += ["--add-data", f"{edl_path}{sep}edlclient"]
 
-    # ── Hidden imports (PyQt6 plugins thường bị miss) ──
+    # ── Hidden imports (PyQt6 plugins are often missed) ──
     hidden = [
         "PyQt6.QtCore",
         "PyQt6.QtGui",
@@ -120,7 +120,7 @@ def build_command(onefile=False):
     for h in hidden:
         cmd += ["--hidden-import", h]
 
-    # ── Exclude không cần thiết (giảm kích thước) ──
+    # ── Exclude unnecessary modules (reduce size) ──
     excludes = [
         "tkinter", "unittest", "pydoc", "doctest", "lib2to3",
         "matplotlib", "numpy", "pandas", "scipy",
@@ -135,10 +135,10 @@ def build_command(onefile=False):
 
 
 def clean():
-    """Xóa thư mục build/dist cũ."""
+    """Remove old build/dist directories."""
     for d in [BUILD_DIR, DIST_DIR]:
         if os.path.exists(d):
-            print(f"🗑  Xóa {d}")
+            print(f"🗑  Removing {d}")
             shutil.rmtree(d)
     spec = os.path.join(ROOT, f"{APP_NAME}.spec")
     if os.path.exists(spec):
@@ -146,35 +146,35 @@ def clean():
 
 
 def copy_extras():
-    """Copy các file cần thiết vào thư mục dist sau khi build."""
+    """Copy required files into the dist directory after build."""
     os_name = get_os()
     output_dir = os.path.join(DIST_DIR, APP_NAME)
 
     if not os.path.isdir(output_dir):
-        # Onefile mode — dist chứa file trực tiếp
+        # Onefile mode - dist contains the file directly
         output_dir = DIST_DIR
 
-    # Copy config.json mẫu
+    # Copy sample config.json
     config_src = os.path.join(ROOT, "config.json")
     if os.path.isfile(config_src):
         shutil.copy2(config_src, os.path.join(output_dir, "config.json"))
         print(f"📄  Copied config.json")
 
-    # Copy platform-tools nếu có
+    # Copy platform-tools if available
     pt_src = os.path.join(ROOT, "platform-tools")
     pt_dst = os.path.join(output_dir, "platform-tools")
     if os.path.isdir(pt_src) and not os.path.isdir(pt_dst):
         shutil.copytree(pt_src, pt_dst)
         print(f"📁  Copied platform-tools/")
 
-    # Copy scrcpy nếu có
+    # Copy scrcpy if available
     sc_src = os.path.join(ROOT, "scrcpy")
     sc_dst = os.path.join(output_dir, "scrcpy")
     if os.path.isdir(sc_src) and not os.path.isdir(sc_dst):
         shutil.copytree(sc_src, sc_dst)
         print(f"📁  Copied scrcpy/")
 
-    # Copy edl tool nếu có (fallback local)
+    # Copy edl tool if available (local fallback)
     edl_src = os.path.join(ROOT, "edl")
     edl_dst = os.path.join(output_dir, "edl")
     if os.path.isdir(edl_src) and not os.path.isdir(edl_dst):
@@ -191,46 +191,46 @@ def main():
     mode = "one-file" if onefile else "one-folder"
 
     print(f"╔══════════════════════════════════════════╗")
-    print(f"║  NT Flash Tools — Build ({os_name})      ║")
+    print(f"║  MEZO Flash Tool — Build ({os_name})      ║")
     print(f"║  Mode: {mode:<33}║")
     print(f"╚══════════════════════════════════════════╝")
     print()
 
-    # Kiểm tra PyInstaller
+    # Check PyInstaller
     try:
         import PyInstaller
         print(f"✔  PyInstaller {PyInstaller.__version__}")
     except ImportError:
-        print("✖  PyInstaller chưa cài. Chạy: pip install pyinstaller")
+        print("✖  PyInstaller is not installed. Run: pip install pyinstaller")
         sys.exit(1)
 
     if do_clean:
         clean()
 
     cmd = build_command(onefile)
-    print(f"\n🔨  Lệnh build:\n   {' '.join(cmd)}\n")
+    print(f"\n🔨  Build command:\n   {' '.join(cmd)}\n")
 
     rc = subprocess.call(cmd, cwd=ROOT)
     if rc != 0:
-        print(f"\n✖  Build thất bại (mã {rc})")
+        print(f"\n✖  Build failed (code {rc})")
         sys.exit(rc)
 
-    print(f"\n✔  Build thành công!")
+    print(f"\n✔  Build succeeded!")
 
     if not onefile:
         copy_extras()
 
-    # Kết quả
+    # Result
     output_dir = os.path.join(DIST_DIR, APP_NAME)
     if onefile:
         ext = ".exe" if os_name == 'windows' else ""
         output_file = os.path.join(DIST_DIR, f"{APP_NAME}{ext}")
-        print(f"\n📦  File đầu ra: {output_file}")
+        print(f"\n📦  Output file: {output_file}")
     else:
-        print(f"\n📦  Thư mục đầu ra: {output_dir}")
+        print(f"\n📦  Output directory: {output_dir}")
 
     print(f"\n{'='*50}")
-    print(f"  Hoàn tất! Chạy ứng dụng:")
+    print(f"  Complete! Run the application:")
     if onefile:
         if os_name == 'windows':
             print(f"    dist\\{APP_NAME}.exe")

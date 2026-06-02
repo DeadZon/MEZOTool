@@ -20,13 +20,13 @@ class SettingsPage(ScrollArea):
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # ── Quan trọng: background transparent cho dark mode ──
+        # ── Important: transparent background for dark mode ──
         self.setStyleSheet("QScrollArea { background: transparent; border: none; }")
 
         self._build()
 
     def _build(self):
-        # Widget chứa nội dung cũng phải transparent
+        # The content widget must also be transparent
         w = QWidget()
         w.setObjectName("settingsContent")
         w.setStyleSheet("#settingsContent { background: transparent; }")
@@ -35,41 +35,41 @@ class SettingsPage(ScrollArea):
         layout.setContentsMargins(36, 20, 36, 20)
         layout.setSpacing(24)
 
-        layout.addWidget(TitleLabel("Cài đặt"))
+        layout.addWidget(TitleLabel("Settings"))
 
         config = load_config()
 
         # ── ADB/Fastboot ──
-        tools = SettingCardGroup("Bộ công cụ ADB & Fastboot", w)
+        tools = SettingCardGroup("ADB & Fastboot Tools", w)
 
         self.status_card = PushSettingCard(
-            "Kiểm tra", FIF.FINGERPRINT,
-            "Phiên bản ADB & Fastboot",
-            "Đang kiểm tra...", tools)
+            "Check", FIF.FINGERPRINT,
+            "ADB & Fastboot Version",
+            "Checking...", tools)
         self.status_card.button.clicked.connect(self._check_version)
         tools.addSettingCard(self.status_card)
 
-        path_text = config.get("platform_tools_path", "") or "Chưa cấu hình..."
+        path_text = config.get("platform_tools_path", "") or "Not configured..."
         self.path_card = PushSettingCard(
-            "Chọn thư mục", FIF.FOLDER,
-            "Đường dẫn Platform Tools",
+            "Select Folder", FIF.FOLDER,
+            "Platform Tools Path",
             path_text, tools)
         self.path_card.button.clicked.connect(self._pick_folder)
         tools.addSettingCard(self.path_card)
 
         self.dl_card = PushSettingCard(
-            "Tải xuống", FIF.DOWNLOAD,
-            "Tự động tải Platform Tools",
-            "Tải bản mới nhất từ Google.", tools)
+            "Download", FIF.DOWNLOAD,
+            "Download Platform Tools Automatically",
+            "Download the latest version from Google.", tools)
         self.dl_card.button.clicked.connect(self._download)
         tools.addSettingCard(self.dl_card)
 
-        # Progress (ẩn)
+        # Progress (hidden)
         self.dl_container = QWidget(tools)
         self.dl_container.setStyleSheet("background: transparent;")
         dl_lay = QVBoxLayout(self.dl_container)
         dl_lay.setContentsMargins(16, 8, 16, 8)
-        self.dl_label = BodyLabel("Sẵn sàng.")
+        self.dl_label = BodyLabel("Ready.")
         self.dl_progress = ProgressBar()
         self.dl_progress.setValue(0)
         dl_lay.addWidget(self.dl_label)
@@ -80,13 +80,13 @@ class SettingsPage(ScrollArea):
         layout.addWidget(tools)
 
         # ── Theme ──
-        theme_group = SettingCardGroup("Giao diện ứng dụng", w)
+        theme_group = SettingCardGroup("Application Appearance", w)
 
         self.theme_card = SettingCard(
-            FIF.BRUSH, "Chủ đề hiển thị",
-            "Lựa chọn giao diện sáng / tối.", theme_group)
+            FIF.BRUSH, "Display Theme",
+            "Choose light or dark appearance.", theme_group)
         self.theme_combo = ComboBox()
-        self.theme_combo.addItems(["Sáng", "Tối", "Theo hệ thống"])
+        self.theme_combo.addItems(["Light", "Dark", "System"])
         self.theme_combo.setMinimumWidth(150)
         idx = {"Light": 0, "Dark": 1, "System": 2}
         self.theme_combo.setCurrentIndex(idx.get(config.get("theme", "System"), 2))
@@ -106,10 +106,10 @@ class SettingsPage(ScrollArea):
             a, f = self.manager.get_version()
             self.status_card.setContent(f"ADB: {a}  |  Fastboot: {f}")
         else:
-            self.status_card.setContent("Không tìm thấy. Chọn đường dẫn hoặc tải xuống.")
+            self.status_card.setContent("Not found. Select a path or download it.")
 
     def _pick_folder(self):
-        p = QFileDialog.getExistingDirectory(self, "Chọn thư mục Platform Tools")
+        p = QFileDialog.getExistingDirectory(self, "Select Folder Platform Tools")
         if p:
             config = load_config()
             config["platform_tools_path"] = p
@@ -118,7 +118,7 @@ class SettingsPage(ScrollArea):
             self.manager.detect_paths()
             self._check_version()
             self.settings_changed.emit()
-            InfoBar.success("Đã lưu", f"Đường dẫn: {p}",
+            InfoBar.success("Saved", f"Path: {p}",
                           position=InfoBarPosition.TOP, parent=self.window())
 
     def _change_theme(self, index):
@@ -131,13 +131,13 @@ class SettingsPage(ScrollArea):
 
     def _download(self):
         if self.downloader and self.downloader.isRunning():
-            InfoBar.info("Đang tải", "Vui lòng đợi.", position=InfoBarPosition.TOP,
+            InfoBar.info("Downloading", "Please wait.", position=InfoBarPosition.TOP,
                        parent=self.window())
             return
         self.dl_container.setVisible(True)
         self.dl_card.setEnabled(False)
         self.dl_progress.setValue(0)
-        self.dl_label.setText("Đang kết nối...")
+        self.dl_label.setText("Connecting...")
         self.downloader = PlatformToolsDownloader(dest_dir=self.manager._app_dir)
         self.downloader.progress_signal.connect(self.dl_progress.setValue)
         self.downloader.status_signal.connect(self.dl_label.setText)
@@ -154,9 +154,9 @@ class SettingsPage(ScrollArea):
             self.manager.detect_paths()
             self._check_version()
             self.settings_changed.emit()
-            InfoBar.success("Hoàn tất!", "Platform Tools đã được cài đặt.",
+            InfoBar.success("Complete!", "Platform Tools has been installed.",
                           position=InfoBarPosition.TOP, parent=self.window())
             self.dl_container.setVisible(False)
         else:
-            InfoBar.error("Lỗi", msg, position=InfoBarPosition.TOP,
+            InfoBar.error("Error", msg, position=InfoBarPosition.TOP,
                         parent=self.window())

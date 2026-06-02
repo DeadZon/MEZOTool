@@ -4,8 +4,8 @@ from core.adb_fastboot import ADBFastbootManager
 
 
 class DeviceMonitor(QThread):
-    """Giám sát thiết bị ngầm mỗi 3 giây, chỉ phát signal khi có thay đổi.
-    Hỗ trợ pause/resume để tránh poll thiết bị khi đang flash."""
+    """Monitor devices in the background every 3 seconds and emit only when changes occur.
+    Supports pause/resume to avoid polling the device during flashing."""
     devices_signal = pyqtSignal(list)
 
     def __init__(self, manager: ADBFastbootManager):
@@ -19,13 +19,13 @@ class DeviceMonitor(QThread):
         self._running = False
 
     def pause(self):
-        """Tạm dừng giám sát (dùng khi đang flash)."""
+        """Pause monitoring during flashing."""
         self._paused = True
 
     def resume(self):
-        """Tiếp tục giám sát sau khi flash xong."""
+        """Resume monitoring after flashing completes."""
         self._paused = False
-        self._last = None  # Force re-scan ngay lần tiếp
+        self._last = None  # Force a re-scan on the next pass
 
     def run(self):
         while self._running:

@@ -8,12 +8,12 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 
 class PlatformToolsDownloader(QThread):
-    """Tải Platform Tools từ Google, tự phát hiện hệ điều hành."""
+    """Download Platform Tools from Google with automatic OS detection."""
     progress_signal = pyqtSignal(int)
     status_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str)
 
-    # URL theo hệ điều hành
+    # OS-specific URLs
     URLS = {
         "windows": "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
         "linux":   "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
@@ -30,7 +30,7 @@ class PlatformToolsDownloader(QThread):
 
     @staticmethod
     def _get_os_key():
-        """Trả về key OS cho dict URLS."""
+        """Return the OS key for the URLS dictionary."""
         if sys.platform == 'win32':
             return "windows"
         elif sys.platform == 'darwin':
@@ -40,7 +40,7 @@ class PlatformToolsDownloader(QThread):
 
     @staticmethod
     def _get_os_label():
-        """Tên OS hiển thị cho người dùng."""
+        """Display OS name for the user."""
         if sys.platform == 'win32':
             return "Windows"
         elif sys.platform == 'darwin':
@@ -52,7 +52,7 @@ class PlatformToolsDownloader(QThread):
         os_key = self._get_os_key()
         url = self.URLS.get(os_key)
         if not url:
-            self.finished_signal.emit(False, f"Không hỗ trợ hệ điều hành: {sys.platform}")
+            self.finished_signal.emit(False, f"Unsupported operating system: {sys.platform}")
             return
 
         zip_path = os.path.join(self.dest_dir, f"platform-tools-latest-{os_key}.zip")
@@ -62,9 +62,9 @@ class PlatformToolsDownloader(QThread):
             if not os.path.exists(self.dest_dir):
                 os.makedirs(self.dest_dir)
 
-            self.status_signal.emit("Đang kết nối tới máy chủ Google...")
+            self.status_signal.emit("Connecting to Google servers...")
 
-            # User-Agent phù hợp theo OS
+            # OS-specific User-Agent
             ua = {
                 "windows": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 "darwin":  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
@@ -78,7 +78,7 @@ class PlatformToolsDownloader(QThread):
                 block_size = 8192
 
                 self.status_signal.emit(
-                    f"Đang tải Platform Tools cho {os_label} (~8MB)...")
+                    f"Downloading Platform Tools for {os_label} (~8MB)...")
 
                 with open(zip_path, 'wb') as out_file:
                     while True:
@@ -86,8 +86,8 @@ class PlatformToolsDownloader(QThread):
                             out_file.close()
                             if os.path.exists(zip_path):
                                 os.remove(zip_path)
-                            self.status_signal.emit("Đã hủy tải xuống.")
-                            self.finished_signal.emit(False, "Đã hủy tải xuống bởi người dùng.")
+                            self.status_signal.emit("Download cancelled.")
+                            self.finished_signal.emit(False, "Download cancelled by the user.")
                             return
 
                         buffer = response.read(block_size)
@@ -101,20 +101,20 @@ class PlatformToolsDownloader(QThread):
                             percent = int(downloaded * 100 / total_size)
                             self.progress_signal.emit(percent)
 
-            # Giải nén
-            self.status_signal.emit("Tải thành công! Đang giải nén...")
+            # Extract
+            self.status_signal.emit("Download complete. Extracting...")
             self.progress_signal.emit(95)
 
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(self.dest_dir)
 
-            # Xóa file zip tạm
+            # Remove temporary zip file
             if os.path.exists(zip_path):
                 os.remove(zip_path)
 
             local_pt_path = os.path.join(self.dest_dir, "platform-tools")
 
-            # Trên Linux/macOS: chmod +x cho adb và fastboot
+            # On Linux/macOS: chmod +x for adb and fastboot
             if sys.platform != 'win32':
                 import stat
                 for tool in ("adb", "fastboot"):
@@ -125,15 +125,15 @@ class PlatformToolsDownloader(QThread):
                                  st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
             self.progress_signal.emit(100)
-            self.status_signal.emit(f"Đã hoàn tất thiết lập ADB & Fastboot ({os_label})!")
+            self.status_signal.emit(f"ADB & Fastboot setup completed ({os_label})!")
             self.finished_signal.emit(True, local_pt_path)
 
         except Exception as e:
-            logging.error(f"Lỗi tải Platform Tools: {e}")
+            logging.error(f"Failed to download Platform Tools: {e}")
             if os.path.exists(zip_path):
                 try:
                     os.remove(zip_path)
                 except Exception:
                     pass
-            self.status_signal.emit(f"Lỗi: {str(e)}")
-            self.finished_signal.emit(False, f"Lỗi trong quá trình tải xuống: {str(e)}")
+            self.status_signal.emit(f"Error: {str(e)}")
+            self.finished_signal.emit(False, f"Download failed: {str(e)}")

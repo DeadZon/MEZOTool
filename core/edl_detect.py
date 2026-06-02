@@ -1,5 +1,5 @@
-"""Phát hiện thiết bị Qualcomm EDL (9008) và công cụ edl trên hệ thống.
-EDL tool được tích hợp sẵn qua pip package 'edl' (bkerler/edl)."""
+"""Detect Qualcomm EDL (9008) devices and the system edl tool.
+The EDL tool is integrated through the 'edl' pip package (bkerler/edl)."""
 import os
 import sys
 import shutil
@@ -14,12 +14,12 @@ EDL_PID = "9008"
 
 
 def detect_edl_devices():
-    """Phát hiện thiết bị Qualcomm 9008 trên Windows qua WMI.
-    Trả về list of dict: [{"name": ..., "device_id": ..., "port": ...}]
+    """Detect Qualcomm 9008 devices on Windows through WMI.
+    Returns a list of dicts: [{"name": ..., "device_id": ..., "port": ...}]
     """
     devices = []
     if sys.platform != 'win32':
-        # Linux: kiểm tra qua lsusb
+        # Linux: check through lsusb
         try:
             result = subprocess.run(
                 ["lsusb", "-d", f"{EDL_VID}:{EDL_PID}"],
@@ -36,7 +36,7 @@ def detect_edl_devices():
             pass
         return devices
 
-    # Windows: dùng PowerShell + WMI
+    # Windows: use PowerShell + WMI
     try:
         ps_cmd = (
             "Get-CimInstance -ClassName Win32_PnPEntity | "
@@ -55,7 +55,7 @@ def detect_edl_devices():
                 if len(parts) >= 2:
                     name = parts[0].strip()
                     device_id = parts[1].strip()
-                    # Trích xuất COM port từ tên (nếu có)
+                    # Extract the COM port from the name if present
                     port = ""
                     if "COM" in name:
                         import re
@@ -68,14 +68,14 @@ def detect_edl_devices():
                         "port": port
                     })
     except Exception as e:
-        logging.warning(f"Lỗi detect EDL device: {e}")
+        logging.warning(f"Failed to detect EDL device: {e}")
 
     return devices
 
 
 def _check_edl_module():
-    """Kiểm tra xem module edlclient đã cài qua pip chưa.
-    Trả về True nếu có thể import được."""
+    """Check whether the edlclient module is installed through pip.
+    Returns True if it can be imported."""
     try:
         import importlib
         spec = importlib.util.find_spec("edlclient")
@@ -85,17 +85,17 @@ def _check_edl_module():
 
 
 def detect_edl_tool():
-    """Tìm đường dẫn edl tool trên hệ thống.
-    Ưu tiên: pip module tích hợp → local directory → PATH.
-    Trả về (path_or_cmd, source) hoặc (None, None).
+    """Find the edl tool path on the system.
+    Priority: integrated pip module -> local directory -> PATH.
+    Returns (path_or_cmd, source) or (None, None).
     source: 'integrated', 'local', 'path'
     """
-    # 1. Ưu tiên: pip module tích hợp sẵn (edlclient)
+    # 1. Priority: integrated pip module (edlclient)
     if _check_edl_module():
-        # Dùng python -m edlclient
+        # Use python -m edlclient
         return f"{sys.executable} -m edlclient", "integrated"
 
-    # Xác định thư mục app
+    # Resolve the app directory
     if getattr(sys, 'frozen', False):
         app_dir = os.path.dirname(sys.executable)
     else:
@@ -103,17 +103,17 @@ def detect_edl_tool():
 
     exe_name = "edl.exe" if sys.platform == 'win32' else "edl"
 
-    # 2. Thư mục edl/ trong project
+    # 2. edl/ directory in the project
     local_path = os.path.join(app_dir, "edl", exe_name)
     if os.path.isfile(local_path):
         return local_path, "local"
 
-    # 3. Thư mục edl/ chứa edl.py
+    # 3. edl/ directory containing edl.py
     local_py = os.path.join(app_dir, "edl", "edl.py")
     if os.path.isfile(local_py):
         return local_py, "local"
 
-    # 4. PATH hệ thống (edl command)
+    # 4. System PATH (edl command)
     found = shutil.which("edl")
     if found:
         return found, "path"
@@ -122,10 +122,10 @@ def detect_edl_tool():
 
 
 def build_edl_cmd(edl_path):
-    """Tạo command prefix từ edl_path.
-    Nếu là 'python -m edlclient' → split.
-    Nếu là .py file → chạy qua python.
-    Nếu là executable → dùng trực tiếp.
+    """Build a command prefix from edl_path.
+    If it is 'python -m edlclient', split it.
+    If it is a .py file, run it through python.
+    If it is an executable, use it directly.
     """
     if edl_path is None:
         return []
@@ -137,7 +137,7 @@ def build_edl_cmd(edl_path):
 
 
 class EdlDeviceMonitor(QThread):
-    """Giám sát thiết bị Qualcomm 9008 mỗi 3 giây."""
+    """Monitor Qualcomm 9008 devices every 3 seconds."""
     devices_signal = pyqtSignal(list)
 
     def __init__(self):

@@ -1,9 +1,9 @@
-"""Theme-aware styles cho NT Flash Tools."""
+"""Theme-aware styles for MEZO Flash Tool."""
 from qfluentwidgets import isDarkTheme
 
 
 def _is_dark():
-    """Helper kiểm tra theme hiện tại."""
+    """Helper that checks the current theme."""
     try:
         return isDarkTheme()
     except Exception:
@@ -11,11 +11,11 @@ def _is_dark():
 
 
 class Styles:
-    """Cung cấp stylesheet tự động thích ứng Light/Dark mode."""
+    """Provides stylesheets that automatically adapt to Light/Dark mode."""
 
     @staticmethod
     def terminal():
-        """Terminal luôn dùng nền tối."""
+        """Terminal always uses a dark background."""
         return """
             QTextEdit {
                 background-color: #0c0c0c;
@@ -31,7 +31,7 @@ class Styles:
 
     @staticmethod
     def console_input():
-        """Ô nhập lệnh luôn dùng nền tối."""
+        """Command input always uses a dark background."""
         return """
             QLineEdit {
                 background-color: #1a1a2e;
@@ -90,7 +90,7 @@ class Styles:
 
     @staticmethod
     def warning_label():
-        """Nhãn cảnh báo nhẹ thích ứng theme."""
+        """Theme-aware subtle warning label."""
         if _is_dark():
             return "color: #ffb74d; font-size: 12px;"
         else:
@@ -131,7 +131,7 @@ class Styles:
 
     @staticmethod
     def status_edl_connected():
-        """Trạng thái EDL 9008 đã kết nối — gradient cam."""
+        """Connected EDL 9008 status with an orange gradient."""
         return """
             QFrame#edlStatusFrame {
                 background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #e65100, stop:1 #f57c00);
@@ -146,7 +146,7 @@ class Styles:
 
     @staticmethod
     def status_edl_disconnected():
-        """Trạng thái EDL chưa kết nối."""
+        """Disconnected EDL status."""
         if _is_dark():
             return """
                 QFrame#edlStatusFrame {

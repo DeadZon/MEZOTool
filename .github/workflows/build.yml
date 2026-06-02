@@ -1,13 +1,13 @@
-name: Build NTFlashTools
+name: Build MEZO Flash Tool
 
 on:
   push:
     tags:
-      - 'v*'           # Tự động build khi push tag vd: v1.0.0
-  workflow_dispatch:     # Cho phép chạy thủ công từ GitHub UI
+      - 'v*'           # Auto build khi push tag vd: v1.0.0
+  workflow_dispatch:     # Allow manual runs from the GitHub UI
     inputs:
       release_tag:
-        description: 'Tag cho Release (vd: v1.0.0). Để trống = không tạo release.'
+        description: 'Release tag (e.g. v1.0.0). Leave empty to skip release creation.'
         required: false
         default: ''
 
@@ -64,7 +64,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install PyQt6 PyQt6-Fluent-Widgets darkdetect pyinstaller
 
-      # Linux: cài thư viện GUI cần thiết
+      # Linux: install required GUI libraries
       - name: Install Linux GUI deps
         if: runner.os == 'Linux'
         run: |
@@ -93,7 +93,7 @@ jobs:
         run: |
           python -m PyInstaller --noconfirm --onefile --name NTFlashTools --noconsole --add-data "${{ steps.qfw.outputs.path }}${{ matrix.separator }}qfluentwidgets" --add-data "${{ steps.dd.outputs.path }}${{ matrix.separator }}darkdetect" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import PyQt6.QtSvg --hidden-import PyQt6.QtSvgWidgets --hidden-import qfluentwidgets --hidden-import darkdetect --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module doctest --exclude-module lib2to3 --exclude-module matplotlib --exclude-module numpy --exclude-module pandas --exclude-module scipy app.py
 
-      # Tải platform-tools cho mỗi OS
+      # Download platform-tools for each OS
       - name: Download platform-tools
         shell: python
         run: |
@@ -107,7 +107,7 @@ jobs:
           os.remove(zip_path)
           print("Done!")
 
-      # Tải scrcpy latest cho mỗi OS — dùng tag_name để tạo tên file chính xác
+      # Download the latest scrcpy for each OS; use tag_name to build the exact filename
       - name: Download scrcpy
         shell: python
         env:
@@ -119,7 +119,7 @@ jobs:
           ext = "${{ matrix.scrcpy_ext }}"
           token = os.environ.get("GH_TOKEN", "")
 
-          # Lấy latest release từ GitHub API
+          # Get the latest release from the GitHub API
           api_url = "https://api.github.com/repos/Genymobile/scrcpy/releases/latest"
           headers = {"User-Agent": "NTFlashTools-CI"}
           if token:
@@ -131,14 +131,14 @@ jobs:
           tag = release.get("tag_name", "")
           print(f"Scrcpy latest tag: {tag}")
 
-          # Tạo tên file từ tag_name: scrcpy-{arch}-{tag}.{ext}
-          # Ví dụ: scrcpy-win64-v4.0.zip, scrcpy-macos-aarch64-v4.0.tar.gz
+          # Build the filename from tag_name: scrcpy-{arch}-{tag}.{ext}
+          # Example: scrcpy-win64-v4.0.zip, scrcpy-macos-aarch64-v4.0.tar.gz
           if ext == "tar.gz":
               asset_name = f"scrcpy-{arch}-{tag}.tar.gz"
           else:
               asset_name = f"scrcpy-{arch}-{tag}.{ext}"
 
-          # Tìm asset trong release
+          # Find the asset in the release
           download_url = None
           for asset in release.get("assets", []):
               if asset["name"] == asset_name:
@@ -146,15 +146,15 @@ jobs:
                   break
 
           if not download_url:
-              print(f"WARNING: Không tìm thấy asset '{asset_name}'")
+              print(f"WARNING: Asset not found: '{asset_name}'")
               print(f"Available assets: {[a['name'] for a in release.get('assets', [])]}")
-              # Không fail build, scrcpy là optional
+              # Do not fail the build; scrcpy is optional
               exit(0)
 
           print(f"Downloading {asset_name}...")
           urllib.request.urlretrieve(download_url, asset_name)
 
-          # Giải nén
+          # Extract
           scrcpy_dir = os.path.join("dist", "scrcpy")
           os.makedirs(scrcpy_dir, exist_ok=True)
 
@@ -197,7 +197,7 @@ jobs:
           if os.path.exists("config.json"):
               shutil.copy2("config.json", "dist/config.json")
 
-      # Debug: liệt kê nội dung dist
+      # Debug: list dist contents
       - name: List dist contents
         run: |
           echo "=== dist/ contents ==="
@@ -210,8 +210,8 @@ jobs:
           path: dist/
           retention-days: 30
 
-  # ── Tạo Release ──
-  # Chạy khi push tag HOẶC workflow_dispatch có nhập release_tag
+  # ── Create Release ──
+  # Run when pushing a tag OR when workflow_dispatch provides release_tag
   release:
     needs: build
     runs-on: ubuntu-latest

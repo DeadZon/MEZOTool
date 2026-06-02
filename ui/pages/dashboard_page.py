@@ -14,14 +14,14 @@ from ui.styles import Styles
 from core.device_monitor import DeviceMonitor
 
 
-# Các phân vùng KHÔNG thêm hậu tố _a/_b
+# Partitions that must NOT receive the _a/_b suffix
 NO_SLOT_PARTITIONS = {"cust", "super", "userdata", "metadata", "frp"}
 
 
 class DeviceInfoWorker(QThread):
-    """Thread lấy thông tin thiết bị để không block main thread.
-    get_device_info() gọi nhiều subprocess (getprop/getvar), có thể
-    treo khi thiết bị bận → không nên chạy trên main thread."""
+    """Thread that fetches device information without blocking the main thread.
+    get_device_info() calls multiple subprocesses (getprop/getvar) and can hang
+    when the device is busy, so it should not run on the main thread."""
     info_signal = pyqtSignal(dict, dict)  # (device_dict, info_dict)
 
     def __init__(self, manager: ADBFastbootManager, device: dict):
@@ -34,7 +34,7 @@ class DeviceInfoWorker(QThread):
             info = self.manager.get_device_info(self.device["serial"], self.device["mode"])
             self.info_signal.emit(self.device, info)
         except Exception:
-            # Trả về info mặc định nếu lỗi
+            # Return default info on error
             self.info_signal.emit(self.device, {
                 "serial": self.device["serial"], "mode": self.device["mode"],
                 "name": "N/A", "codename": "N/A", "bootloader": "N/A", "slot": "N/A"
@@ -42,7 +42,7 @@ class DeviceInfoWorker(QThread):
 
 
 class RebootWaiter(QThread):
-    """Thread đợi thiết bị chuyển sang FASTBOOT sau khi reboot."""
+    """Thread that waits for the device to switch to FASTBOOT after reboot."""
     done_signal = pyqtSignal(bool, str)  # (success, serial_or_error)
     log_signal = pyqtSignal(str)
 
@@ -53,26 +53,26 @@ class RebootWaiter(QThread):
         self.timeout = timeout
 
     def run(self):
-        self.log_signal.emit("⏳ Đang đợi thiết bị chuyển sang FASTBOOT...")
+        self.log_signal.emit("⏳ Waiting for the device to switch to FASTBOOT...")
         start = time.time()
         while time.time() - start < self.timeout:
             devs = self.manager.get_devices()
             for d in devs:
                 if d["mode"] == "FASTBOOT":
-                    self.log_signal.emit(f"✔ Thiết bị đã vào FASTBOOT: {d['serial']}")
+                    self.log_signal.emit(f"✔ Device entered FASTBOOT: {d['serial']}")
                     self.done_signal.emit(True, d["serial"])
                     return
             self.msleep(2000)
-        self.done_signal.emit(False, "Timeout: Thiết bị không chuyển sang FASTBOOT trong 30 giây.")
+        self.done_signal.emit(False, "Timeout: device did not switch to FASTBOOT within 30 seconds.")
 
 
 class DashboardPage(QWidget):
-    """Bảng điều khiển chính: panel điều khiển bên trái, log bên phải."""
+    """Main dashboard: control panel on the left, log on the right."""
 
     def __init__(self, manager: ADBFastbootManager, parent=None):
         super().__init__(parent=parent)
         self.manager = manager
-        self.monitor = None  # Sẽ được set từ MainWindow
+        self.monitor = None  # Set from MainWindow
         self.worker = None
         self.connected_devices = []
         self.active_device = None
@@ -80,13 +80,13 @@ class DashboardPage(QWidget):
         self.detected_images = []
         self.step_labels = []
         self._reboot_btns = []
-        self._device_product = ""  # Lưu product name cho log
+        self._device_product = ""  # Store product name for logs
         self._reboot_waiter = None
-        self._info_worker = None  # Background thread cho get_device_info
+        self._info_worker = None  # Background thread for get_device_info
         # Batch log buffer
         self._log_buffer = []
         self._log_timer = QTimer(self)
-        self._log_timer.setInterval(100)  # Flush mỗi 100ms
+        self._log_timer.setInterval(100)  # Flush every 100ms
         self._log_timer.timeout.connect(self._flush_log_buffer)
         self.setObjectName("dashboard_page")
         self._build()
@@ -99,7 +99,7 @@ class DashboardPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Bên trái: Bảng điều khiển (scroll) ──
+        # ── Left side: dashboard controls (scroll) ──
         left_scroll = QScrollArea()
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -112,9 +112,9 @@ class DashboardPage(QWidget):
         left_layout.setContentsMargins(24, 20, 12, 20)
         left_layout.setSpacing(14)
 
-        left_layout.addWidget(TitleLabel("Bảng điều khiển"))
+        left_layout.addWidget(TitleLabel("Dashboard"))
 
-        # ─── 1. Trạng thái thiết bị ───
+        # ─── 1. Device status ───
         self.status_frame = QFrame()
         self.status_frame.setObjectName("statusFrame")
         self.status_frame.setMinimumHeight(120)
@@ -125,11 +125,11 @@ class DashboardPage(QWidget):
         self.status_icon.setStyleSheet("font-size: 28px; background: transparent;")
         sl.addWidget(self.status_icon)
 
-        self.status_title = QLabel("Chưa phát hiện thiết bị")
+        self.status_title = QLabel("No device detected")
         self.status_title.setStyleSheet("font-size: 15px; font-weight: bold; background: transparent;")
         sl.addWidget(self.status_title)
 
-        self.status_desc = QLabel("Kết nối điện thoại Android qua cáp USB.")
+        self.status_desc = QLabel("Connect an Android phone with a USB cable.")
         self.status_desc.setWordWrap(True)
         self.status_desc.setStyleSheet("font-size: 12px; background: transparent;")
         sl.addWidget(self.status_desc)
@@ -151,36 +151,36 @@ class DashboardPage(QWidget):
 
         left_layout.addWidget(self.status_frame)
 
-        # ─── 2. Chọn thư mục ROM ───
+        # ─── 2. Select ROM Folder ───
         rom_card = SimpleCardWidget()
         rcl = QVBoxLayout(rom_card)
         rcl.setContentsMargins(16, 14, 16, 14)
-        rcl.addWidget(SubtitleLabel("1. Chọn thư mục ROM"))
-        self.btn_dir = PushButton("📁 Chọn thư mục")
+        rcl.addWidget(SubtitleLabel("1. Select ROM Folder"))
+        self.btn_dir = PushButton("📁 Select Folder")
         self.btn_dir.clicked.connect(self._pick_dir)
         rcl.addWidget(self.btn_dir)
         left_layout.addWidget(rom_card)
 
-        # ─── 3. Tùy chọn flash ───
+        # ─── 3. Flash Options ───
         opt_card = SimpleCardWidget()
         ol = QVBoxLayout(opt_card)
         ol.setContentsMargins(16, 14, 16, 14)
-        ol.addWidget(SubtitleLabel("2. Tùy chọn Flash"))
+        ol.addWidget(SubtitleLabel("2. Flash Options"))
 
-        self.chk_wipe = CheckBox("🗑 Xóa sạch dữ liệu (Clean Flash)")
+        self.chk_wipe = CheckBox("🗑 Wipe data (Clean Flash)")
         self.chk_wipe.setStyleSheet(Styles.wipe_checkbox())
         ol.addWidget(self.chk_wipe)
         left_layout.addWidget(opt_card)
 
-        # ─── 4. Khởi động nhanh ───
+        # ─── 4. Quick Reboot ───
         reboot_card = SimpleCardWidget()
         rl = QVBoxLayout(reboot_card)
         rl.setContentsMargins(16, 14, 16, 14)
-        rl.addWidget(SubtitleLabel("Khởi động nhanh"))
+        rl.addWidget(SubtitleLabel("Quick Reboot"))
         bl = QGridLayout()
         bl.setSpacing(8)
         btns = [
-            ("🔄  Hệ thống", "system"),
+            ("🔄  System", "system"),
             ("⚡  Bootloader", "bootloader"),
             ("🛠  Recovery", "recovery"),
             ("🔧  Fastbootd", "fastboot"),
@@ -195,7 +195,7 @@ class DashboardPage(QWidget):
         self._reboot_btns = [bl.itemAt(i).widget() for i in range(bl.count())]
         left_layout.addWidget(reboot_card)
 
-        # ─── 5. Nút Flash + Progress ───
+        # ─── 5. Flash button + progress ───
         action_card = SimpleCardWidget()
         al = QVBoxLayout(action_card)
         al.setContentsMargins(16, 12, 16, 12)
@@ -206,11 +206,11 @@ class DashboardPage(QWidget):
         al.addWidget(self.progress)
 
         br = QHBoxLayout()
-        self.btn_flash = PrimaryPushButton("⚡ Bắt đầu Flash ROM")
+        self.btn_flash = PrimaryPushButton("⚡ Start ROM Flash")
         self.btn_flash.setMinimumHeight(44)
         self.btn_flash.setEnabled(False)
         self.btn_flash.clicked.connect(self._confirm)
-        self.btn_cancel = PushButton("Hủy")
+        self.btn_cancel = PushButton("Cancel")
         self.btn_cancel.setMinimumHeight(44)
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self._cancel)
@@ -225,7 +225,7 @@ class DashboardPage(QWidget):
         left_scroll.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         root.addWidget(left_scroll, 2)
 
-        # ── Bên phải: Log terminal ──
+        # ── Right side: log terminal ──
         right_widget = QWidget()
         right_widget.setObjectName("dashboardRight")
         right_widget.setStyleSheet("#dashboardRight { background: transparent; }")
@@ -233,18 +233,18 @@ class DashboardPage(QWidget):
         right_layout.setContentsMargins(12, 20, 24, 20)
         right_layout.setSpacing(10)
 
-        right_layout.addWidget(SubtitleLabel("📋 Nhật ký (Log)"))
+        right_layout.addWidget(SubtitleLabel("📋 Log"))
 
         self.terminal = QTextEdit()
         self.terminal.setReadOnly(True)
         self.terminal.setStyleSheet(Styles.terminal())
         right_layout.addWidget(self.terminal, 1)
 
-        # Checklist tiến trình
+        # Progress checklist
         cl_card = SimpleCardWidget()
         cl_layout = QVBoxLayout(cl_card)
         cl_layout.setContentsMargins(12, 10, 12, 10)
-        cl_layout.addWidget(BodyLabel("Tiến trình:"))
+        cl_layout.addWidget(BodyLabel("Progress:"))
         self.checklist_area = QScrollArea()
         self.checklist_area.setWidgetResizable(True)
         self.checklist_area.setMaximumHeight(140)
@@ -258,13 +258,13 @@ class DashboardPage(QWidget):
         cl_layout.addWidget(self.checklist_area)
         right_layout.addWidget(cl_card)
 
-        # Buttons dưới terminal
+        # Buttons below terminal
         tr = QHBoxLayout()
         b1 = PushButton("📋 Copy Log")
         b1.clicked.connect(self._copy)
-        b2 = PushButton("🗑 Xóa Log")
+        b2 = PushButton("🗑 Clear Log")
         b2.clicked.connect(self.terminal.clear)
-        b3 = PushButton("💾 Xuất Log")
+        b3 = PushButton("💾 Export Log")
         b3.clicked.connect(self._save_log)
         tr.addWidget(b1)
         tr.addWidget(b2)
@@ -281,8 +281,8 @@ class DashboardPage(QWidget):
     def _set_disconnected(self):
         self.status_frame.setStyleSheet(Styles.status_disconnected())
         self.status_icon.setText("📵")
-        self.status_title.setText("Chưa phát hiện thiết bị")
-        self.status_desc.setText("Kết nối điện thoại Android qua cáp USB.")
+        self.status_title.setText("No device detected")
+        self.status_desc.setText("Connect an Android phone with a USB cable.")
         for v in self._info_vals:
             v.setText("—")
         for b in self._reboot_btns:
@@ -290,7 +290,7 @@ class DashboardPage(QWidget):
         self.btn_flash.setEnabled(False)
 
     def set_monitor(self, monitor: DeviceMonitor):
-        """Gắn reference đến DeviceMonitor để có thể pause/resume."""
+        """Attach a DeviceMonitor reference so flashing can pause/resume it."""
         self.monitor = monitor
 
     def update_devices(self, devices):
@@ -304,22 +304,22 @@ class DashboardPage(QWidget):
         self.active_device = d
         self.status_frame.setStyleSheet(Styles.status_connected())
         self.status_icon.setText("📱")
-        self.status_title.setText(f"Đã kết nối ({d['mode']})")
-        self.status_desc.setText(f"Serial: {d['serial']}  —  Trạng thái: {d['state'].upper()}")
+        self.status_title.setText(f"Connected ({d['mode']})")
+        self.status_desc.setText(f"Serial: {d['serial']}  —  Status: {d['state'].upper()}")
 
         for b in self._reboot_btns:
             b.setEnabled(True)
         self.btn_flash.setEnabled(True)
 
-        # Lấy device info trong background thread thay vì main thread
-        # Tránh block UI khi subprocess bị treo
+        # Fetch device info in a background thread instead of the main thread
+        # Avoid blocking the UI if a subprocess hangs
         self._info_worker = DeviceInfoWorker(self.manager, d)
         self._info_worker.info_signal.connect(self._on_device_info)
         self._info_worker.start()
 
     def _on_device_info(self, device, info):
-        """Callback khi lấy thông tin thiết bị xong (chạy trên main thread)."""
-        # Chỉ cập nhật nếu thiết bị vẫn là active device
+        """Callback after device information is fetched (runs on the main thread)."""
+        # Only update if the device is still the active device
         if self.active_device and self.active_device.get("serial") == device.get("serial"):
             self._info_vals[0].setText(info["serial"])
             self._info_vals[1].setText(info["name"])
@@ -327,7 +327,7 @@ class DashboardPage(QWidget):
             self._info_vals[3].setText(info["bootloader"])
             self._info_vals[4].setText(info["slot"])
 
-            # Lưu codename để dùng khi lưu log
+            # Store codename for saving logs
             codename = info.get("codename", "")
             if codename and codename != "N/A":
                 self._device_product = codename
@@ -346,17 +346,17 @@ class DashboardPage(QWidget):
             _, err, rc = self.manager.run_fastboot(args)
 
         if rc == 0:
-            InfoBar.success("Đã gửi lệnh", f"Đang reboot vào {target}.",
+            InfoBar.success("Command sent", f"Rebooting to {target}.",
                           position=InfoBarPosition.TOP, parent=self.window())
         else:
-            InfoBar.error("Thất bại", err or "Lỗi không xác định.",
+            InfoBar.error("Failed", err or "Unknown error.",
                         position=InfoBarPosition.TOP, parent=self.window())
 
     # ══════════════════════════════════════════════════════════
     #  ROM SELECTION & SCANNING
     # ══════════════════════════════════════════════════════════
     def _pick_dir(self):
-        p = QFileDialog.getExistingDirectory(self, "Chọn thư mục ROM")
+        p = QFileDialog.getExistingDirectory(self, "Select ROM Folder")
         if p:
             self.selected_rom_dir = p
             self.btn_dir.setText(f"📁 {os.path.basename(p)}")
@@ -366,7 +366,7 @@ class DashboardPage(QWidget):
         self.detected_images = []
         try:
             files = [f for f in os.listdir(d) if f.lower().endswith(('.img', '.bin'))]
-            # Cũng quét thư mục images/ (giống bat file)
+            # Also scan the images/ directory, matching the batch file behavior.
             images_dir = os.path.join(d, "images")
             if os.path.isdir(images_dir):
                 img_files = [f for f in os.listdir(images_dir) if f.lower().endswith(('.img', '.bin'))]
@@ -420,68 +420,68 @@ class DashboardPage(QWidget):
             elif status == FlashWorker.FAILED:
                 lbl.setText(f"✖ {txt}")
                 lbl.setStyleSheet(Styles.checklist_failed())
-            # Tự động cuộn checklist đến bước hiện tại
+            # Automatically scroll the checklist to the current step.
             self.checklist_area.ensureWidgetVisible(lbl)
 
     # ══════════════════════════════════════════════════════════
-    #  FLASH LOGIC (dựa trên file bat)
+    #  FLASH LOGIC (based on the batch file)
     # ══════════════════════════════════════════════════════════
     def _confirm(self):
         if not self.selected_rom_dir or not self.detected_images:
-            InfoBar.error("Lỗi", "Chưa chọn thư mục ROM hợp lệ.",
+            InfoBar.error("Error", "No valid ROM folder selected.",
                         position=InfoBarPosition.TOP, parent=self.window())
             return
         if not self.manager.is_available():
-            InfoBar.error("Lỗi", "ADB/Fastboot chưa cấu hình. Vào Cài đặt để thiết lập.",
+            InfoBar.error("Error", "ADB/Fastboot is not configured. Open Settings to set it up.",
                         position=InfoBarPosition.TOP, parent=self.window())
             return
 
         if not self.connected_devices:
-            InfoBar.error("Lỗi", "Không có thiết bị nào được kết nối.",
+            InfoBar.error("Error", "No device is connected.",
                         position=InfoBarPosition.TOP, parent=self.window())
             return
 
         d = self.connected_devices[0]
 
-        # Nếu thiết bị đang ở ADB (system/recovery) → tự động reboot bootloader
+        # If the device is in ADB mode (system/recovery), automatically reboot to bootloader
         if d["mode"] == "ADB":
-            msg = (f"Thiết bị đang ở chế độ {d['state'].upper()} (ADB).\n"
-                   "Sẽ tự động reboot vào Bootloader để flash.\n\n")
+            msg = (f"Device is in {d['state'].upper()} (ADB).\n"
+                   "It will automatically reboot to Bootloader for flashing.\n\n")
         else:
             msg = ""
 
-        msg += "Flash ROM sẽ ghi đè hệ điều hành hiện tại."
+        msg += "Flashing the ROM will overwrite the current operating system."
         if self.chk_wipe.isChecked():
-            msg += "\n\n⚠ CLEAN FLASH: Toàn bộ dữ liệu sẽ bị xóa sạch!"
-        msg += f"\n\nSẽ flash {len(self.detected_images)} phân vùng.\nTiếp tục?"
+            msg += "\n\n⚠ CLEAN FLASH: all data will be erased!"
+        msg += f"\n\nWill flash {len(self.detected_images)} partitions.\nContinue?"
 
-        box = MessageBox("Xác nhận Flash ROM", msg, self.window())
+        box = MessageBox("Confirm ROM Flash", msg, self.window())
         box.yesButton.setText("⚡ Flash")
-        box.cancelButton.setText("Hủy")
+        box.cancelButton.setText("Cancel")
         if box.exec():
             if d["mode"] == "ADB":
-                # Reboot vào bootloader rồi đợi
+                # Reboot into bootloader and wait
                 self._set_busy(True)
                 self.terminal.clear()
-                self.terminal.append("🔄 Đang reboot thiết bị vào Bootloader...")
+                self.terminal.append("🔄 Rebooting device into Bootloader...")
                 ok, err = self.manager.reboot_to_bootloader(d["serial"], d["mode"])
                 if not ok:
-                    self.terminal.append(f"✖ Không thể reboot: {err}")
+                    self.terminal.append(f"✖ Could not reboot: {err}")
                     self._set_busy(False)
-                    InfoBar.error("Lỗi", f"Không thể reboot vào bootloader: {err}",
+                    InfoBar.error("Error", f"Could not reboot into bootloader: {err}",
                                 position=InfoBarPosition.TOP, parent=self.window())
                     return
-                # Đợi thiết bị chuyển sang FASTBOOT
+                # Wait for the device to switch to FASTBOOT
                 self._reboot_waiter = RebootWaiter(self.manager, d["serial"])
                 self._reboot_waiter.log_signal.connect(self.terminal.append)
                 self._reboot_waiter.done_signal.connect(self._on_reboot_done)
                 self._reboot_waiter.start()
             else:
-                # Đã ở FASTBOOT, flash luôn
+                # Already in FASTBOOT, start flashing
                 self._run(d["serial"])
 
     def _on_reboot_done(self, success, serial_or_error):
-        """Callback khi thiết bị đã reboot xong vào bootloader."""
+        """Callback after the device has rebooted into bootloader."""
         self._reboot_waiter = None
         if success:
             self.terminal.append("")
@@ -489,34 +489,34 @@ class DashboardPage(QWidget):
         else:
             self._set_busy(False)
             self.terminal.append(f"✖ {serial_or_error}")
-            InfoBar.error("Lỗi", serial_or_error,
+            InfoBar.error("Error", serial_or_error,
                         position=InfoBarPosition.TOP, parent=self.window())
 
     def _build_flash_args(self, partition, path):
-        """Tạo args cho lệnh flash. 
-        - super: dùng 'flash super' + --skip-secondary để tránh treo
-        - cust: flash không có hậu tố _a/_b
-        - Các phân vùng khác: flash cả _a và _b
+        """Build arguments for the flash command. 
+        - super: use 'flash super' + --skip-secondary to avoid hangs
+        - cust: flash without the _a/_b suffix
+        - Other partitions: flash both _a and _b
         """
         part_lower = partition.lower()
         steps = []
 
         if part_lower == "super":
-            # Flash super không có slot, thêm --skip-secondary để tránh treo
+            # Flash super without slot suffixes; add --skip-secondary to avoid hangs.
             steps.append({
                 "name": f"Flash {partition}",
                 "type": "FASTBOOT",
                 "args": ["flash", partition, path]
             })
         elif part_lower in NO_SLOT_PARTITIONS:
-            # cust, userdata, metadata, frp: không thêm hậu tố slot
+            # cust, userdata, metadata, frp: do not add slot suffixes
             steps.append({
                 "name": f"Flash {partition}",
                 "type": "FASTBOOT",
                 "args": ["flash", partition, path]
             })
         else:
-            # Các phân vùng khác: flash cả slot _a và _b
+            # Other partitions: flash both _a and _b slots
             steps.append({
                 "name": f"Flash {partition}_a",
                 "type": "FASTBOOT",
@@ -534,18 +534,18 @@ class DashboardPage(QWidget):
         steps = []
         self._clear_checklist()
 
-        # Lấy thông tin thiết bị để hiển thị trong log
+        # Fetch device information for display in the log
         info = self.manager.get_device_info(serial, "FASTBOOT")
         codename = info.get("codename", "N/A")
         if codename and codename != "N/A":
             self._device_product = codename
-        self.terminal.append(f"📱 Thiết bị: {info.get('name', 'N/A')}")
+        self.terminal.append(f"📱 Device: {info.get('name', 'N/A')}")
         self.terminal.append(f"📦 Codename: {info.get('codename', 'N/A')}")
         self.terminal.append(f"🔐 Bootloader: {info.get('bootloader', 'N/A')}")
         self.terminal.append(f"💾 Slot: {info.get('slot', 'N/A')}")
         self.terminal.append("")
 
-        # Flash từng image với hậu tố _a/_b (trừ cust và super)
+        # Flash each image with _a/_b suffixes except cust and super
         for img in self.detected_images:
             part = img["partition"]
             path = img["path"]
@@ -554,7 +554,7 @@ class DashboardPage(QWidget):
                 steps.append(fs)
                 self._add_step(fs["name"])
 
-        # Wipe nếu chọn Clean Flash (giống bat: erase frp, userdata, metadata)
+        # Wipe when Clean Flash is selected (like the bat file: erase frp, userdata, metadata)
         if self.chk_wipe.isChecked():
             for part in ["frp", "userdata", "metadata"]:
                 steps.append({"name": f"Erase {part}", "type": "FASTBOOT",
@@ -563,16 +563,16 @@ class DashboardPage(QWidget):
 
         # Reboot
         steps.append({"name": "Reboot", "type": "FASTBOOT", "args": ["reboot"]})
-        self._add_step("Reboot hệ thống")
+        self._add_step("Reboot system")
 
         self._set_busy(True)
         self.progress.setValue(0)
 
-        # Pause monitor khi đang flash — tránh poll thiết bị đang bận
+        # Pause monitoring during flashing to avoid polling a busy device
         if self.monitor:
             self.monitor.pause()
 
-        # Bật batch log timer
+        # Start the batch log timer
         self._log_buffer.clear()
         self._log_timer.start()
 
@@ -597,39 +597,39 @@ class DashboardPage(QWidget):
             self.worker.cancel()
 
     def _ask_continue(self, step_name):
-        """Hiện hộp thoại hỏi user có muốn tiếp tục flash khi gặp lỗi."""
+        """Show a dialog asking whether to continue flashing after an error."""
         box = MessageBox(
-            "Flash phân vùng thất bại",
-            f"Bước '{step_name}' bị lỗi.\n\nBạn có muốn bỏ qua và tiếp tục flash các phân vùng còn lại không?",
+            "Partition Flash Failed",
+            f"Step '{step_name}' failed.\n\nDo you want to skip it and continue flashing the remaining partitions?",
             self.window()
         )
-        box.yesButton.setText("Tiếp tục")
-        box.cancelButton.setText("Dừng lại")
+        box.yesButton.setText("Continue")
+        box.cancelButton.setText("Stop")
         result = box.exec()
         self.worker.reply_continue(result)
 
     def _on_log_line(self, text):
-        """Buffer log line, sẽ flush bởi QTimer mỗi 100ms."""
+        """Buffer log lines; QTimer flushes them every 100ms."""
         self._log_buffer.append(text)
 
     def _flush_log_buffer(self):
-        """Flush toàn bộ log buffer vào terminal 1 lần — giảm re-render."""
+        """Flush the full log buffer into the terminal in one pass to reduce re-rendering."""
         if not self._log_buffer:
             return
         batch = self._log_buffer.copy()
         self._log_buffer.clear()
-        # Tắt cập nhật UI trong khi batch insert
+        # Disable UI updates during batch insert
         self.terminal.setUpdatesEnabled(False)
         for line in batch:
             self.terminal.append(line)
         self.terminal.setUpdatesEnabled(True)
 
     def _done(self, ok, msg):
-        # Dừng batch log timer và flush log còn lại
+        # Stop the batch log timer and flush remaining logs
         self._log_timer.stop()
         self._flush_log_buffer()
 
-        # Resume monitor sau khi flash xong
+        # Resume monitoring after flashing completes
         if self.monitor:
             self.monitor.resume()
 
@@ -637,33 +637,33 @@ class DashboardPage(QWidget):
         if ok:
             for i in range(len(self.step_labels)):
                 self._update_step(i, FlashWorker.SUCCESS)
-            InfoBar.success("Flash ROM thành công! 🏆", msg,
+            InfoBar.success("ROM Flash Successful! 🏆", msg,
                           position=InfoBarPosition.TOP, parent=self.window())
         else:
-            InfoBar.error("Lỗi Flash", msg,
+            InfoBar.error("Error Flash", msg,
                         position=InfoBarPosition.TOP, parent=self.window())
 
     def _copy(self):
         from PyQt6.QtWidgets import QApplication
         QApplication.clipboard().setText(self.terminal.toPlainText())
-        InfoBar.success("Đã copy", "", duration=1500,
+        InfoBar.success("Copied", "", duration=1500,
                       position=InfoBarPosition.TOP, parent=self.window())
 
     def _save_log(self):
-        """Xuất log ra file .txt với tên: date_time_product.txt
-        Sử dụng product name đã lưu từ getvar/getprop thay vì query lại."""
+        """Export the log to a .txt file named date_time_product.txt.
+        Uses the stored product name from getvar/getprop instead of querying again."""
         text = self.terminal.toPlainText().strip()
         if not text:
-            InfoBar.info("Trống", "Chưa có nội dung log.",
+            InfoBar.info("Empty", "No log content yet.",
                         position=InfoBarPosition.TOP, parent=self.window())
             return
 
-        # Tạo tên file: date_time_product
+        # Create filename: date_time_product
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        # Dùng codename đã lưu sẵn (từ getvar product / getprop ro.product.device)
+        # Use the stored codename (from getvar product / getprop ro.product.device)
         model = self._device_product if self._device_product else ""
         if not model:
-            # Fallback: thử lấy từ thiết bị hiện tại
+            # Fallback: try reading from the current device
             if self.active_device:
                 info = self.manager.get_device_info(
                     self.active_device["serial"], self.active_device["mode"])
@@ -672,19 +672,19 @@ class DashboardPage(QWidget):
                     self._device_product = model
         if not model or model == "N/A":
             model = "unknown"
-        # Loại bỏ ký tự không hợp lệ trong tên file
+        # Remove invalid filename characters
         model = model.replace(" ", "_").replace("/", "-").replace("\\", "-")
         default_name = f"{now}_{model}.txt"
 
         path, _ = QFileDialog.getSaveFileName(
-            self, "Xuất Log", default_name,
+            self, "Export Log", default_name,
             "Text Files (*.txt);;All Files (*)")
         if path:
             try:
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(text)
-                InfoBar.success("Đã lưu", os.path.basename(path),
+                InfoBar.success("Saved", os.path.basename(path),
                               position=InfoBarPosition.TOP, parent=self.window())
             except Exception as e:
-                InfoBar.error("Lỗi", str(e),
+                InfoBar.error("Error", str(e),
                             position=InfoBarPosition.TOP, parent=self.window())

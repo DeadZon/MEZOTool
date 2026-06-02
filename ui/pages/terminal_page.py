@@ -12,7 +12,7 @@ from ui.styles import Styles
 
 
 class CommandRunner(QThread):
-    """Thread chạy lệnh ADB/Fastboot và stream output real-time."""
+    """Thread that runs ADB/Fastboot commands and streams output in real time."""
     output_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(int)  # return code
 
@@ -61,12 +61,12 @@ class CommandRunner(QThread):
 
             self.finished_signal.emit(self._proc.returncode)
         except Exception as e:
-            self.output_signal.emit(f"✖ Lỗi: {e}")
+            self.output_signal.emit(f"✖ Error: {e}")
             self.finished_signal.emit(-1)
 
 
 class HistoryLineEdit(QLineEdit):
-    """QLineEdit với lịch sử lệnh (phím ↑↓)."""
+    """QLineEdit with command history (Up/Down keys)."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self._history = []
@@ -102,7 +102,7 @@ class HistoryLineEdit(QLineEdit):
 
 
 class TerminalPage(QWidget):
-    """Trang terminal cho phép nhập lệnh ADB/Fastboot tùy ý."""
+    """Terminal page for running custom ADB/Fastboot commands."""
 
     def __init__(self, manager: ADBFastbootManager, parent=None):
         super().__init__(parent=parent)
@@ -118,11 +118,11 @@ class TerminalPage(QWidget):
 
         layout.addWidget(TitleLabel("Terminal"))
 
-        # ── Thông tin ──
+        # ── Information ──
         info_card = SimpleCardWidget()
         info_layout = QVBoxLayout(info_card)
         info_layout.setContentsMargins(16, 12, 16, 12)
-        desc = BodyLabel("Nhập lệnh ADB hoặc Fastboot. Ví dụ: adb devices, fastboot getvar all, adb shell getprop")
+        desc = BodyLabel("Enter an ADB or Fastboot command. Examples: adb devices, fastboot getvar all, adb shell getprop")
         desc.setWordWrap(True)
         info_layout.addWidget(desc)
         layout.addWidget(info_card)
@@ -143,18 +143,18 @@ class TerminalPage(QWidget):
         input_row.addWidget(prompt)
 
         self.input_field = HistoryLineEdit()
-        self.input_field.setPlaceholderText("Nhập lệnh (ví dụ: adb devices)...")
+        self.input_field.setPlaceholderText("Enter a command (for example: adb devices)...")
         self.input_field.setStyleSheet(Styles.console_input())
         self.input_field.setMinimumHeight(40)
         self.input_field.returnPressed.connect(self._execute)
         input_row.addWidget(self.input_field, 1)
 
-        self.btn_run = PushButton("▶ Chạy")
+        self.btn_run = PushButton("▶ Run")
         self.btn_run.setMinimumHeight(40)
         self.btn_run.clicked.connect(self._execute)
         input_row.addWidget(self.btn_run)
 
-        self.btn_stop = PushButton("⏹ Dừng")
+        self.btn_stop = PushButton("⏹ Stop")
         self.btn_stop.setMinimumHeight(40)
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._cancel)
@@ -166,7 +166,7 @@ class TerminalPage(QWidget):
         btn_row = QHBoxLayout()
         b1 = PushButton("📋 Copy Log")
         b1.clicked.connect(self._copy)
-        b2 = PushButton("🗑 Xóa Log")
+        b2 = PushButton("🗑 Clear Log")
         b2.clicked.connect(self.terminal.clear)
         btn_row.addWidget(b1)
         btn_row.addWidget(b2)
@@ -174,7 +174,7 @@ class TerminalPage(QWidget):
         layout.addLayout(btn_row)
 
     def _resolve_cmd(self, text):
-        """Phân tích lệnh user nhập, thay thế adb/fastboot bằng path đúng."""
+        """Parse the user command and replace adb/fastboot with the correct path."""
         parts = text.strip().split()
         if not parts:
             return None
@@ -186,16 +186,16 @@ class TerminalPage(QWidget):
             if self.manager.adb_path:
                 return [self.manager.adb_path] + args
             else:
-                self.terminal.append("✖ ADB chưa được cấu hình. Vào Cài đặt để thiết lập.")
+                self.terminal.append("✖ ADB is not configured. Open Settings to set it up.")
                 return None
         elif cmd_name == "fastboot":
             if self.manager.fastboot_path:
                 return [self.manager.fastboot_path] + args
             else:
-                self.terminal.append("✖ Fastboot chưa được cấu hình. Vào Cài đặt để thiết lập.")
+                self.terminal.append("✖ Fastboot is not configured. Open Settings to set it up.")
                 return None
         else:
-            self.terminal.append(f"✖ Lệnh không hỗ trợ: '{cmd_name}'. Chỉ hỗ trợ 'adb' và 'fastboot'.")
+            self.terminal.append(f"✖ Unsupported command: '{cmd_name}'. Only 'adb' and 'fastboot' are supported.")
             return None
 
     def _execute(self):
@@ -204,7 +204,7 @@ class TerminalPage(QWidget):
             return
 
         if self._runner and self._runner.isRunning():
-            InfoBar.warning("Đang chạy", "Vui lòng đợi lệnh hiện tại hoàn tất.",
+            InfoBar.warning("Running", "Please wait for the current command to finish.",
                           position=InfoBarPosition.TOP, parent=self.window())
             return
 
@@ -215,7 +215,7 @@ class TerminalPage(QWidget):
         self.input_field.add_history(text)
         self.input_field.clear()
 
-        # Hiện lệnh trong terminal
+        # Show the command in the terminal
         self.terminal.append(f"\n❯ {text}")
         self.terminal.append("─" * 40)
 
@@ -231,14 +231,14 @@ class TerminalPage(QWidget):
     def _on_finished(self, rc):
         self._set_busy(False)
         if rc == 0:
-            self.terminal.append("✔ Hoàn tất")
+            self.terminal.append("✔ Complete")
         else:
-            self.terminal.append(f"✖ Kết thúc (mã {rc})")
+            self.terminal.append(f"✖ Finished (code {rc})")
 
     def _cancel(self):
         if self._runner and self._runner.isRunning():
             self._runner.cancel()
-            self.terminal.append("⏹ Đã hủy lệnh.")
+            self.terminal.append("⏹ Command cancelled.")
             self._set_busy(False)
 
     def _set_busy(self, busy):
@@ -249,11 +249,11 @@ class TerminalPage(QWidget):
     def _copy(self):
         from PyQt6.QtWidgets import QApplication
         QApplication.clipboard().setText(self.terminal.toPlainText())
-        InfoBar.success("Đã copy", "", duration=1500,
+        InfoBar.success("Copied", "", duration=1500,
                       position=InfoBarPosition.TOP, parent=self.window())
 
     def cleanup(self):
-        """Gọi khi đóng app."""
+        """Called when the app closes."""
         if self._runner and self._runner.isRunning():
             self._runner.cancel()
             self._runner.wait(2000)

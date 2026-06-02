@@ -1,4 +1,4 @@
-"""Trang EDL Flash — Flash thiết bị Qualcomm qua chế độ 9008 (Emergency Download)."""
+"""EDL Flash page - flash Qualcomm devices through 9008 mode (Emergency Download)."""
 import os
 import glob
 from PyQt6.QtCore import Qt, QTimer
@@ -14,7 +14,7 @@ from ui.styles import Styles
 
 
 class PartitionEntry(QWidget):
-    """Widget cho 1 dòng partition: tên partition + file image + nút xóa."""
+    """Widget for one partition row: partition name + image file + remove button."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -23,11 +23,11 @@ class PartitionEntry(QWidget):
         layout.setSpacing(8)
 
         self.partition_input = LineEdit()
-        self.partition_input.setPlaceholderText("Tên partition (vd: boot)")
+        self.partition_input.setPlaceholderText("Partition name (e.g. boot)")
         self.partition_input.setMinimumWidth(140)
         layout.addWidget(self.partition_input, 1)
 
-        self.file_label = BodyLabel("Chưa chọn file")
+        self.file_label = BodyLabel("No file selected")
         self.file_label.setStyleSheet("font-size: 12px;")
         layout.addWidget(self.file_label, 2)
 
@@ -45,18 +45,18 @@ class PartitionEntry(QWidget):
 
     def _pick_file(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn file image",
+            self, "Select image file",
             "", "Image Files (*.img *.bin *.mbn *.elf);;All Files (*)")
         if path:
             self._file_path = path
             self.file_label.setText(os.path.basename(path))
-            # Tự động điền tên partition từ tên file nếu chưa nhập
+            # Automatically fill the partition name from the filename if empty.
             if not self.partition_input.text():
                 name = os.path.splitext(os.path.basename(path))[0]
                 self.partition_input.setText(name)
 
     def get_data(self):
-        """Trả về (partition_name, file_path) hoặc None."""
+        """Return (partition_name, file_path) or None."""
         part = self.partition_input.text().strip()
         if part and self._file_path and os.path.isfile(self._file_path):
             return part, self._file_path
@@ -64,7 +64,7 @@ class PartitionEntry(QWidget):
 
 
 class EdlPage(QWidget):
-    """Trang EDL Flash — flash thiết bị qua Qualcomm EDL mode (9008)."""
+    """EDL Flash page - flash devices through Qualcomm EDL mode (9008)."""
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -107,7 +107,7 @@ class EdlPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Bên trái: Panel điều khiển (scroll) ──
+        # ── Left side: control panel (scroll) ──
         left_scroll = QScrollArea()
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -122,7 +122,7 @@ class EdlPage(QWidget):
 
         left_layout.addWidget(TitleLabel("EDL Flash (9008)"))
 
-        # ─── 1. Trạng thái thiết bị EDL ───
+        # ─── 1. EDL device status ───
         self.status_frame = QFrame()
         self.status_frame.setObjectName("edlStatusFrame")
         self.status_frame.setMinimumHeight(90)
@@ -133,11 +133,11 @@ class EdlPage(QWidget):
         self.status_icon.setStyleSheet("font-size: 28px; background: transparent;")
         sl.addWidget(self.status_icon)
 
-        self.status_title = QLabel("Chưa phát hiện thiết bị EDL")
+        self.status_title = QLabel("No device detected EDL")
         self.status_title.setStyleSheet("font-size: 15px; font-weight: bold; background: transparent;")
         sl.addWidget(self.status_title)
 
-        self.status_desc = QLabel("Kết nối thiết bị Qualcomm ở chế độ EDL (9008).")
+        self.status_desc = QLabel("Connect a Qualcomm device in EDL mode (9008).")
         self.status_desc.setWordWrap(True)
         self.status_desc.setStyleSheet("font-size: 12px; background: transparent;")
         sl.addWidget(self.status_desc)
@@ -149,7 +149,7 @@ class EdlPage(QWidget):
         tool_card = SimpleCardWidget()
         tl = QVBoxLayout(tool_card)
         tl.setContentsMargins(16, 14, 16, 14)
-        tl.addWidget(SubtitleLabel("Công cụ EDL"))
+        tl.addWidget(SubtitleLabel("EDL Tool"))
 
         self.tool_label = BodyLabel("")
         self.tool_label.setWordWrap(True)
@@ -157,7 +157,7 @@ class EdlPage(QWidget):
         tl.addWidget(self.tool_label)
 
         tool_btn_row = QHBoxLayout()
-        self.btn_refresh_tool = PushButton("🔄 Kiểm tra lại")
+        self.btn_refresh_tool = PushButton("🔄 Check Again")
         self.btn_refresh_tool.clicked.connect(self._refresh_tool)
         tool_btn_row.addWidget(self.btn_refresh_tool)
         tool_btn_row.addStretch()
@@ -165,40 +165,40 @@ class EdlPage(QWidget):
 
         left_layout.addWidget(tool_card)
 
-        # ─── 3. Chọn Firehose Loader ───
+        # ─── 3. Select Firehose Loader ───
         loader_card = SimpleCardWidget()
         ll = QVBoxLayout(loader_card)
         ll.setContentsMargins(16, 14, 16, 14)
         ll.addWidget(SubtitleLabel("1. Firehose Loader"))
 
-        desc = BodyLabel("File programmer (.mbn/.elf) dành riêng cho chipset của thiết bị.")
+        desc = BodyLabel("Programmer file (.mbn/.elf) specific to the device chipset.")
         desc.setWordWrap(True)
         desc.setStyleSheet("font-size: 12px;")
         ll.addWidget(desc)
 
-        self.btn_loader = PushButton("📁 Chọn file Loader")
+        self.btn_loader = PushButton("📁 Select Loader File")
         self.btn_loader.clicked.connect(self._pick_loader)
         ll.addWidget(self.btn_loader)
 
         left_layout.addWidget(loader_card)
 
-        # ─── 4. Chế độ Flash ───
+        # ─── 4. Flash Mode ───
         mode_card = SimpleCardWidget()
         ml = QVBoxLayout(mode_card)
         ml.setContentsMargins(16, 14, 16, 14)
-        ml.addWidget(SubtitleLabel("2. Chế độ Flash"))
+        ml.addWidget(SubtitleLabel("2. Flash Mode"))
 
         mode_row = QHBoxLayout()
-        mode_row.addWidget(BodyLabel("Chế độ:"))
+        mode_row.addWidget(BodyLabel("Mode:"))
         self.mode_combo = ComboBox()
-        self.mode_combo.addItems(["Flash theo XML", "Flash từng Partition"])
+        self.mode_combo.addItems(["Flash by XML", "Flash Individual Partitions"])
         self.mode_combo.setMinimumWidth(200)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_change)
         mode_row.addWidget(self.mode_combo)
         mode_row.addStretch()
         ml.addLayout(mode_row)
 
-        # Stacked widget cho 2 chế độ
+        # Stacked widget for the 2 modes
         self.mode_stack = QStackedWidget()
 
         # ── Page 0: XML mode ──
@@ -207,12 +207,12 @@ class EdlPage(QWidget):
         xml_layout.setContentsMargins(0, 8, 0, 0)
         xml_layout.setSpacing(8)
 
-        xml_desc = BodyLabel("Chọn thư mục ROM chứa rawprogram*.xml, patch*.xml và images.")
+        xml_desc = BodyLabel("Select the ROM folder containing rawprogram*.xml, patch*.xml, and images.")
         xml_desc.setWordWrap(True)
         xml_desc.setStyleSheet("font-size: 12px;")
         xml_layout.addWidget(xml_desc)
 
-        self.btn_rom_dir = PushButton("📁 Chọn thư mục ROM")
+        self.btn_rom_dir = PushButton("📁 Select ROM Folder")
         self.btn_rom_dir.clicked.connect(self._pick_rom_dir)
         xml_layout.addWidget(self.btn_rom_dir)
 
@@ -229,17 +229,17 @@ class EdlPage(QWidget):
         part_layout.setContentsMargins(0, 8, 0, 0)
         part_layout.setSpacing(8)
 
-        part_desc = BodyLabel("Thêm partition và chọn file image tương ứng.")
+        part_desc = BodyLabel("Add a partition and select the matching image file.")
         part_desc.setWordWrap(True)
         part_desc.setStyleSheet("font-size: 12px;")
         part_layout.addWidget(part_desc)
 
-        # Container cho partition entries
+        # Container for partition entries
         self.partition_container = QVBoxLayout()
         self.partition_container.setSpacing(4)
         part_layout.addLayout(self.partition_container)
 
-        self.btn_add_part = PushButton("➕ Thêm Partition")
+        self.btn_add_part = PushButton("➕ Add Partition")
         self.btn_add_part.clicked.connect(self._add_partition_entry)
         part_layout.addWidget(self.btn_add_part)
 
@@ -248,16 +248,16 @@ class EdlPage(QWidget):
         ml.addWidget(self.mode_stack)
         left_layout.addWidget(mode_card)
 
-        # ─── 5. Tùy chọn ───
+        # ─── 5. Options ───
         opt_card = SimpleCardWidget()
         ol = QVBoxLayout(opt_card)
         ol.setContentsMargins(16, 14, 16, 14)
-        ol.addWidget(SubtitleLabel("3. Tùy chọn"))
+        ol.addWidget(SubtitleLabel("3. Options"))
 
         mem_row = QHBoxLayout()
         mem_row.addWidget(BodyLabel("Memory type:"))
         self.mem_combo = ComboBox()
-        self.mem_combo.addItems(["Tự động", "eMMC", "UFS"])
+        self.mem_combo.addItems(["Auto", "eMMC", "UFS"])
         self.mem_combo.setMinimumWidth(140)
         mem_row.addWidget(self.mem_combo)
         mem_row.addStretch()
@@ -265,7 +265,7 @@ class EdlPage(QWidget):
 
         left_layout.addWidget(opt_card)
 
-        # ─── 6. Nút Flash + Progress ───
+        # ─── 6. Flash button + progress ───
         action_card = SimpleCardWidget()
         al = QVBoxLayout(action_card)
         al.setContentsMargins(16, 12, 16, 12)
@@ -276,11 +276,11 @@ class EdlPage(QWidget):
         al.addWidget(self.progress)
 
         br = QHBoxLayout()
-        self.btn_flash = PrimaryPushButton("⚡ Bắt đầu EDL Flash")
+        self.btn_flash = PrimaryPushButton("⚡ Start EDL Flash")
         self.btn_flash.setMinimumHeight(44)
         self.btn_flash.setEnabled(False)
         self.btn_flash.clicked.connect(self._confirm_flash)
-        self.btn_cancel = PushButton("Hủy")
+        self.btn_cancel = PushButton("Cancel")
         self.btn_cancel.setMinimumHeight(44)
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self._cancel)
@@ -288,8 +288,8 @@ class EdlPage(QWidget):
         br.addWidget(self.btn_cancel, 1)
         al.addLayout(br)
 
-        # Nút reset riêng
-        self.btn_reset = PushButton("🔄 Reset thiết bị")
+        # Separate reset button
+        self.btn_reset = PushButton("🔄 Reset Device")
         self.btn_reset.setMinimumHeight(36)
         self.btn_reset.setEnabled(False)
         self.btn_reset.clicked.connect(self._reset_device)
@@ -302,7 +302,7 @@ class EdlPage(QWidget):
         left_scroll.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         root.addWidget(left_scroll, 2)
 
-        # ── Bên phải: Log terminal ──
+        # ── Right side: log terminal ──
         right_widget = QWidget()
         right_widget.setObjectName("edlRight")
         right_widget.setStyleSheet("#edlRight { background: transparent; }")
@@ -317,11 +317,11 @@ class EdlPage(QWidget):
         self.terminal.setStyleSheet(Styles.terminal())
         right_layout.addWidget(self.terminal, 1)
 
-        # Checklist tiến trình
+        # Progress checklist
         cl_card = SimpleCardWidget()
         cl_layout = QVBoxLayout(cl_card)
         cl_layout.setContentsMargins(12, 10, 12, 10)
-        cl_layout.addWidget(BodyLabel("Tiến trình:"))
+        cl_layout.addWidget(BodyLabel("Progress:"))
         self.checklist_area = QScrollArea()
         self.checklist_area.setWidgetResizable(True)
         self.checklist_area.setMaximumHeight(140)
@@ -335,11 +335,11 @@ class EdlPage(QWidget):
         cl_layout.addWidget(self.checklist_area)
         right_layout.addWidget(cl_card)
 
-        # Buttons dưới terminal
+        # Buttons below terminal
         tr = QHBoxLayout()
         b1 = PushButton("📋 Copy Log")
         b1.clicked.connect(self._copy_log)
-        b2 = PushButton("🗑 Xóa Log")
+        b2 = PushButton("🗑 Clear Log")
         b2.clicked.connect(self.terminal.clear)
         tr.addWidget(b1)
         tr.addWidget(b2)
@@ -349,10 +349,10 @@ class EdlPage(QWidget):
         right_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         root.addWidget(right_widget, 3)
 
-        # Thêm 1 entry partition mặc định
+        # Add one default partition entry
         self._add_partition_entry()
 
-        # Set trạng thái ban đầu (sau khi tất cả widget đã tạo xong)
+        # Set the initial state after all widgets are created
         self._set_disconnected()
 
     # ══════════════════════════════════════════════════════════
@@ -361,8 +361,8 @@ class EdlPage(QWidget):
     def _set_disconnected(self):
         self.status_frame.setStyleSheet(Styles.status_edl_disconnected())
         self.status_icon.setText("📵")
-        self.status_title.setText("Chưa phát hiện thiết bị EDL")
-        self.status_desc.setText("Kết nối thiết bị Qualcomm ở chế độ EDL (9008).")
+        self.status_title.setText("No device detected EDL")
+        self.status_desc.setText("Connect a Qualcomm device in EDL mode (9008).")
         self.btn_flash.setEnabled(False)
         self.btn_reset.setEnabled(False)
 
@@ -371,7 +371,7 @@ class EdlPage(QWidget):
         self.status_icon.setText("🔥")
         name = device.get("name", "Qualcomm 9008")
         port = device.get("port", "")
-        self.status_title.setText(f"Thiết bị EDL đã kết nối")
+        self.status_title.setText("EDL device connected")
         desc = f"📱 {name}"
         if port:
             desc += f"  —  Port: {port}"
@@ -392,27 +392,27 @@ class EdlPage(QWidget):
     def _update_tool_label(self):
         if self._edl_path:
             source_map = {
-                "integrated": "tích hợp sẵn",
-                "local": "thư mục local",
-                "path": "PATH hệ thống",
+                "integrated": "integrated",
+                "local": "local directory",
+                "path": "system PATH",
             }
             src = source_map.get(self._edl_source, self._edl_source)
-            self.tool_label.setText(f"✔ EDL tool đã sẵn sàng ({src})")
+            self.tool_label.setText(f"✔ EDL tool is ready ({src})")
         else:
             self.tool_label.setText(
-                "⚠ Không tìm thấy EDL tool.\n\n"
-                "Chạy: pip install edl\n"
-                "Hoặc tải từ: github.com/bkerler/edl"
+                "⚠ EDL tool was not found.\n\n"
+                "Run: pip install edl\n"
+                "Or download from: github.com/bkerler/edl"
             )
 
     def _refresh_tool(self):
         self._detect_tool()
         self._update_tool_label()
         if self._edl_path:
-            InfoBar.success("Tìm thấy!", f"EDL tool: {self._edl_path}",
+            InfoBar.success("Found!", f"EDL tool: {self._edl_path}",
                           position=InfoBarPosition.TOP, parent=self.window())
         else:
-            InfoBar.warning("Không tìm thấy", "Vui lòng cài đặt edl tool.",
+            InfoBar.warning("Not found", "Please install the edl tool.",
                           position=InfoBarPosition.TOP, parent=self.window())
 
     # ══════════════════════════════════════════════════════════
@@ -420,7 +420,7 @@ class EdlPage(QWidget):
     # ══════════════════════════════════════════════════════════
     def _pick_loader(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn Firehose Loader",
+            self, "Select Firehose Loader",
             "", "Programmer Files (*.mbn *.elf);;All Files (*)")
         if path:
             self._loader_path = path
@@ -438,28 +438,28 @@ class EdlPage(QWidget):
     #  XML MODE
     # ══════════════════════════════════════════════════════════
     def _pick_rom_dir(self):
-        p = QFileDialog.getExistingDirectory(self, "Chọn thư mục ROM (EDL)")
+        p = QFileDialog.getExistingDirectory(self, "Select ROM Folder (EDL)")
         if p:
             self._rom_dir = p
             self.btn_rom_dir.setText(f"📁 {os.path.basename(p)}")
             self._scan_xml(p)
 
     def _scan_xml(self, directory):
-        """Quét thư mục tìm rawprogram*.xml và patch*.xml."""
+        """Scan the folder for rawprogram*.xml and patch*.xml."""
         self._xml_files = []
 
         rawprograms = sorted(glob.glob(os.path.join(directory, "rawprogram*.xml")))
         patches = sorted(glob.glob(os.path.join(directory, "patch*.xml")))
 
         if not rawprograms:
-            self.xml_info_label.setText("⚠ Không tìm thấy rawprogram*.xml trong thư mục này.")
+            self.xml_info_label.setText("⚠ No rawprogram*.xml found in this folder.")
             self._update_flash_button()
             return
 
-        # Ghép cặp rawprogram + patch theo số index
+        # Pair rawprogram + patch by index number
         for rp in rawprograms:
             rp_name = os.path.basename(rp)
-            # Tìm patch tương ứng (rawprogram0.xml → patch0.xml)
+            # Find the matching patch (rawprogram0.xml -> patch0.xml)
             idx = rp_name.replace("rawprogram", "").replace(".xml", "")
             matching_patch = None
             for pt in patches:
@@ -470,18 +470,18 @@ class EdlPage(QWidget):
                     break
             self._xml_files.append((rp, matching_patch))
 
-        # Hiển thị kết quả
-        info_lines = [f"✔ Tìm thấy {len(rawprograms)} rawprogram XML:"]
+        # Display results
+        info_lines = [f"✔ Found {len(rawprograms)} rawprogram XML:"]
         for rp, pt in self._xml_files:
             rp_name = os.path.basename(rp)
-            pt_name = os.path.basename(pt) if pt else "(không có patch)"
+            pt_name = os.path.basename(pt) if pt else "(no patch)"
             info_lines.append(f"  • {rp_name} + {pt_name}")
 
-        # Đếm images
+        # Count images
         images = glob.glob(os.path.join(directory, "*.img")) + \
                  glob.glob(os.path.join(directory, "*.bin"))
         if images:
-            info_lines.append(f"\n📦 {len(images)} file image trong thư mục.")
+            info_lines.append(f"\n📦 {len(images)} image files in the folder.")
 
         self.xml_info_label.setText("\n".join(info_lines))
         self._update_flash_button()
@@ -497,7 +497,7 @@ class EdlPage(QWidget):
 
     def _remove_partition_entry(self, entry):
         if len(self._partition_entries) <= 1:
-            return  # Giữ ít nhất 1 entry
+            return  # Keep at least one entry
         self.partition_container.removeWidget(entry)
         self._partition_entries.remove(entry)
         entry.deleteLater()
@@ -506,14 +506,14 @@ class EdlPage(QWidget):
     #  FLASH LOGIC
     # ══════════════════════════════════════════════════════════
     def _update_flash_button(self):
-        """Cập nhật trạng thái nút Flash dựa trên điều kiện."""
+        """Update the Flash button state based on requirements."""
         can_flash = (
             self._edl_devices and
             self._edl_path is not None and
             self._loader_path is not None
         )
         if can_flash and self.mode_combo.currentIndex() == 0:
-            # XML mode: cần có xml files
+            # XML mode: XML files are required
             can_flash = len(self._xml_files) > 0
         self.btn_flash.setEnabled(can_flash)
 
@@ -523,33 +523,33 @@ class EdlPage(QWidget):
 
     def _confirm_flash(self):
         if not self._edl_devices:
-            InfoBar.error("Lỗi", "Không có thiết bị EDL nào được kết nối.",
+            InfoBar.error("Error", "No EDL device is connected.",
                         position=InfoBarPosition.TOP, parent=self.window())
             return
         if not self._edl_path:
-            InfoBar.error("Lỗi", "EDL tool chưa được cài đặt.",
+            InfoBar.error("Error", "EDL tool is not installed.",
                         position=InfoBarPosition.TOP, parent=self.window())
             return
         if not self._loader_path:
-            InfoBar.error("Lỗi", "Chưa chọn Firehose Loader.",
+            InfoBar.error("Error", "No Firehose Loader selected.",
                         position=InfoBarPosition.TOP, parent=self.window())
             return
 
         # Build steps
         steps = self._build_steps()
         if not steps:
-            InfoBar.error("Lỗi", "Không có bước flash nào. Kiểm tra lại cấu hình.",
+            InfoBar.error("Error", "There are no flash steps. Check the configuration.",
                         position=InfoBarPosition.TOP, parent=self.window())
             return
 
-        msg = (f"⚠ EDL Flash là thao tác cấp thấp, rất nguy hiểm!\n\n"
+        msg = (f"⚠ EDL Flash is a low-level and very risky operation!\n\n"
                f"Loader: {os.path.basename(self._loader_path)}\n"
-               f"Số bước: {len(steps)}\n\n"
-               f"Tiếp tục?")
+               f"Steps: {len(steps)}\n\n"
+               f"Continue?")
 
-        box = MessageBox("Xác nhận EDL Flash", msg, self.window())
+        box = MessageBox("Confirm EDL Flash", msg, self.window())
         box.yesButton.setText("⚡ Flash")
-        box.cancelButton.setText("Hủy")
+        box.cancelButton.setText("Cancel")
         if box.exec():
             self._run_flash(steps)
 
@@ -585,14 +585,14 @@ class EdlPage(QWidget):
         self._clear_checklist()
         self.terminal.clear()
 
-        # Thêm checklist entries
+        # Add checklist entries
         for step in steps:
             self._add_step(step["name"])
 
         self._set_busy(True)
         self.progress.setValue(0)
 
-        # Bật batch log timer
+        # Start the batch log timer
         self._log_buffer.clear()
         self._log_timer.start()
 
@@ -669,16 +669,16 @@ class EdlPage(QWidget):
         self._log_timer.stop()
         self._flush_log_buffer()
         self._set_busy(False)
-        # Re-enable flash button nếu vẫn có thiết bị
+        # Re-enable the flash button if a device is still present
         self._update_flash_button()
 
         if ok:
             for i in range(len(self.step_labels)):
                 self._update_step(i, EdlWorker.SUCCESS)
-            InfoBar.success("EDL Flash thành công! 🏆", msg,
+            InfoBar.success("EDL Flash Successful! 🏆", msg,
                           position=InfoBarPosition.TOP, parent=self.window())
         else:
-            InfoBar.error("Lỗi EDL Flash", msg,
+            InfoBar.error("Error EDL Flash", msg,
                         position=InfoBarPosition.TOP, parent=self.window())
 
     # ══════════════════════════════════════════════════════════
@@ -696,10 +696,10 @@ class EdlPage(QWidget):
     def _on_reset_done(self, ok, msg):
         self.btn_reset.setEnabled(True)
         if ok:
-            InfoBar.success("Đã reset", msg,
+            InfoBar.success("Reset Complete", msg,
                           position=InfoBarPosition.TOP, parent=self.window())
         else:
-            InfoBar.error("Lỗi reset", msg,
+            InfoBar.error("Error reset", msg,
                         position=InfoBarPosition.TOP, parent=self.window())
 
     # ══════════════════════════════════════════════════════════
@@ -708,11 +708,11 @@ class EdlPage(QWidget):
     def _copy_log(self):
         from PyQt6.QtWidgets import QApplication
         QApplication.clipboard().setText(self.terminal.toPlainText())
-        InfoBar.success("Đã copy", "", duration=1500,
+        InfoBar.success("Copied", "", duration=1500,
                       position=InfoBarPosition.TOP, parent=self.window())
 
     def cleanup(self):
-        """Gọi khi đóng app."""
+        """Called when the app closes."""
         if self.edl_monitor:
             self.edl_monitor.stop()
             self.edl_monitor.wait(3000)

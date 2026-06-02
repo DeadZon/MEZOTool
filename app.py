@@ -5,7 +5,7 @@ from PyQt6.QtGui import QSurfaceFormat
 from PyQt6.QtWidgets import QApplication
 from ui.main_window import MainWindow
 
-# Ẩn cửa sổ CMD trên Windows
+# Hide the CMD window on Windows
 if sys.platform == 'win32':
     try:
         import ctypes
@@ -16,10 +16,10 @@ if sys.platform == 'win32':
 
 
 def _optimize_windows_timer():
-    """Giảm timer resolution của Windows từ ~15.6ms xuống 1ms.
-    Mặc định Windows dùng tick 15.625ms → QTimer, animation, repaint
-    chỉ chạy tối đa ~64Hz và bị giật. timeBeginPeriod(1) khiến hệ thống
-    dùng timer 1ms → animation mượt hơn rất nhiều."""
+    """Reduce the Windows timer resolution from ~15.6ms to 1ms.
+    Windows normally uses a 15.625ms tick, which can limit QTimer, animation,
+    and repaint work to ~64Hz and make rendering feel choppy. timeBeginPeriod(1)
+    requests a 1ms timer for smoother animation."""
     if sys.platform != 'win32':
         return
     try:
@@ -30,8 +30,8 @@ def _optimize_windows_timer():
 
 
 def main():
-    # ── Tối ưu rendering trên Windows ──
-    # Cho phép Qt repaint ngay lập tức, không đợi idle
+    # ── Optimize rendering on Windows ──
+    # Allow Qt to repaint immediately without waiting for idle
     os.environ["QT_QPA_UPDATE_IDLE_TIME"] = "0"
     # HiDPI scaling
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
@@ -40,12 +40,12 @@ def main():
         QApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
-    # Tắt VSync (swap interval = 0) → không bị cap ở refresh rate màn hình
+    # Disable VSync (swap interval = 0), so rendering is not capped by display refresh rate
     fmt = QSurfaceFormat()
     fmt.setSwapInterval(0)
     QSurfaceFormat.setDefaultFormat(fmt)
 
-    # Giảm timer resolution Windows → animation mượt
+    # Reduce Windows timer resolution for smoother animation
     _optimize_windows_timer()
 
     app = QApplication(sys.argv)

@@ -10,15 +10,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
 
-# ── Hằng số tên file theo hệ điều hành ──
+# ── OS-specific executable names ──
 IS_WINDOWS = sys.platform == 'win32'
 ADB_NAME = "adb.exe" if IS_WINDOWS else "adb"
 FASTBOOT_NAME = "fastboot.exe" if IS_WINDOWS else "fastboot"
 
 
 def get_startup_info():
-    """Tạo startup info để ẩn cửa sổ console đen trên Windows.
-    Trả về None trên Linux/macOS (không cần thiết)."""
+    """Create startup info to hide the black console window on Windows.
+    Returns None on Linux/macOS because it is not needed."""
     if IS_WINDOWS:
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -42,14 +42,14 @@ def save_config(config):
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=4, ensure_ascii=False)
     except Exception as e:
-        logging.error(f"Lỗi lưu config: {e}")
+        logging.error(f"Failed to save config: {e}")
 
 
 class ADBFastbootManager:
     def __init__(self):
         self.adb_path = None
         self.fastboot_path = None
-        # Khi chạy từ PyInstaller (frozen), dùng thư mục chứa exe
+        # When running from PyInstaller (frozen), use the executable directory
         if getattr(sys, 'frozen', False):
             self._app_dir = os.path.dirname(sys.executable)
         else:
@@ -57,11 +57,11 @@ class ADBFastbootManager:
         self.detect_paths()
 
     def detect_paths(self):
-        """Phát hiện ADB/Fastboot, tương thích Windows/Linux/macOS."""
+        """Detect ADB/Fastboot, compatible with Windows/Linux/macOS."""
         config = load_config()
         custom = config.get("platform_tools_path", "")
 
-        # 1. Từ cấu hình người dùng
+        # 1. From user configuration
         if custom and os.path.isdir(custom):
             adb = os.path.join(custom, ADB_NAME)
             fb = os.path.join(custom, FASTBOOT_NAME)
@@ -70,7 +70,7 @@ class ADBFastbootManager:
                 self.adb_path, self.fastboot_path = adb, fb
                 return
 
-        # 2. Từ thư mục platform-tools cục bộ
+        # 2. From local platform-tools directory
         local = os.path.join(self._app_dir, "platform-tools")
         adb = os.path.join(local, ADB_NAME)
         fb = os.path.join(local, FASTBOOT_NAME)
@@ -79,7 +79,7 @@ class ADBFastbootManager:
             self.adb_path, self.fastboot_path = adb, fb
             return
 
-        # 3. Từ PATH hệ thống
+        # 3. From system PATH
         adb_sys = shutil.which("adb")
         fb_sys = shutil.which("fastboot")
         if adb_sys and fb_sys:
@@ -90,7 +90,7 @@ class ADBFastbootManager:
 
     @staticmethod
     def _ensure_executable(*paths):
-        """Đảm bảo file có quyền thực thi trên Linux/macOS."""
+        """Ensure files are executable on Linux/macOS."""
         if IS_WINDOWS:
             return
         import stat
@@ -107,7 +107,7 @@ class ADBFastbootManager:
 
     def run_cmd(self, executable, args, timeout=15):
         if not executable:
-            return "", "Công cụ không khả dụng.", -1
+            return "", "Tool is not available.", -1
         cmd = [executable] + args
         try:
             r = subprocess.run(
@@ -156,7 +156,7 @@ class ADBFastbootManager:
         info = {"serial": serial, "mode": mode, "name": "N/A", "codename": "N/A",
                 "bootloader": "N/A", "slot": "N/A"}
         if mode == "ADB":
-            # Lấy tên sản phẩm và codename
+            # Get product name and codename
             n, _, _ = self.run_adb(["-s", serial, "shell", "getprop", "ro.product.name"])
             c, _, _ = self.run_adb(["-s", serial, "shell", "getprop", "ro.product.device"])
             if n: info["name"] = n
@@ -183,7 +183,7 @@ class ADBFastbootManager:
         return info
 
     def reboot_to_bootloader(self, serial, mode):
-        """Reboot thiết bị vào bootloader. Trả về (success, error_msg)."""
+        """Reboot the device into bootloader. Returns (success, error_msg)."""
         if mode == "ADB":
             _, err, rc = self.run_adb(["-s", serial, "reboot", "bootloader"], timeout=30)
         else:

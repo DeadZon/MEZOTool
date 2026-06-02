@@ -1,4 +1,4 @@
-"""Worker QThread cho EDL Flash — chạy lệnh edl tool trong background."""
+"""QThread worker for EDL Flash that runs edl tool commands in the background."""
 import os
 import subprocess
 import threading
@@ -9,9 +9,9 @@ from core.edl_detect import build_edl_cmd
 
 
 class EdlWorker(QThread):
-    """Worker flash EDL. Hỗ trợ 2 chế độ:
-    - XML mode: flash theo rawprogram*.xml + patch*.xml
-    - Partition mode: flash từng partition riêng lẻ
+    """EDL flash worker. Supports 2 modes:
+    - XML mode: flash by rawprogram*.xml + patch*.xml
+    - Partition mode: flash each partition separately
     """
     log_signal = pyqtSignal(str)
     step_signal = pyqtSignal(int, int)   # (index, status)
@@ -23,19 +23,19 @@ class EdlWorker(QThread):
 
     def __init__(self, edl_path, loader_path, steps, memory_type="auto"):
         """
-        edl_path: đường dẫn tới edl tool
-        loader_path: đường dẫn tới firehose programmer (.mbn/.elf)
-        steps: list of dict, mỗi dict có:
-            - mode: "xml" hoặc "partition"
-            - name: tên hiển thị
+        edl_path: path to the edl tool
+        loader_path: path to the firehose programmer (.mbn/.elf)
+        steps: list of dict, each dict has:
+            - mode: "xml" or "partition"
+            - name: display name
             Cho xml mode:
-                - rawprogram: path tới rawprogram*.xml
-                - patch: path tới patch*.xml (optional)
-                - directory: thư mục chứa images
+                - rawprogram: path to rawprogram*.xml
+                - patch: path to patch*.xml (optional)
+                - directory: directory containing images
             Cho partition mode:
-                - partition: tên partition
-                - image: path tới file image
-        memory_type: "emmc", "ufs", hoặc "auto"
+                - partition: partition name
+                - image: path to the image file
+        memory_type: "emmc", "ufs", or "auto"
         """
         super().__init__()
         self.edl_path = edl_path
@@ -68,7 +68,7 @@ class EdlWorker(QThread):
             self._log_buffer.append(text)
 
     def _build_base_args(self):
-        """Tạo base arguments cho edl command."""
+        """Build base arguments for the edl command."""
         args = []
         if self.loader_path:
             args += ["--loader", self.loader_path]
@@ -77,7 +77,7 @@ class EdlWorker(QThread):
         return args
 
     def _build_xml_cmd(self, step):
-        """Tạo lệnh cho XML mode flash."""
+        """Build the command for XML mode flashing."""
         base_cmd = build_edl_cmd(self.edl_path)
         if not base_cmd:
             return None
@@ -97,7 +97,7 @@ class EdlWorker(QThread):
         return cmd
 
     def _build_partition_cmd(self, step):
-        """Tạo lệnh cho partition mode flash."""
+        """Build the command for partition mode flashing."""
         base_cmd = build_edl_cmd(self.edl_path)
         if not base_cmd:
             return None
@@ -110,7 +110,7 @@ class EdlWorker(QThread):
         return cmd
 
     def _stream_output(self, proc):
-        """Đọc stdout/stderr real-time với batch logging."""
+        """Read stdout/stderr in real time with batch logging."""
         def read_stream(stream):
             try:
                 for line in iter(stream.readline, ''):
@@ -149,31 +149,31 @@ class EdlWorker(QThread):
 
     def run(self):
         if not self.steps:
-            self.finished_signal.emit(False, "Không có bước flash nào.")
+            self.finished_signal.emit(False, "No flash steps.")
             return
 
         base_cmd = build_edl_cmd(self.edl_path)
         if not base_cmd:
-            self.finished_signal.emit(False, "EDL tool không khả dụng.")
+            self.finished_signal.emit(False, "EDL tool is not available.")
             return
 
         if not self.loader_path or not os.path.isfile(self.loader_path):
-            self.finished_signal.emit(False, "Chưa chọn Firehose Loader (.mbn/.elf).")
+            self.finished_signal.emit(False, "No Firehose Loader (.mbn/.elf) selected.")
             return
 
         total = len(self.steps)
-        self.log_signal.emit("═══ BẮT ĐẦU EDL FLASH ═══\n")
+        self.log_signal.emit("═══ STARTING EDL FLASH ═══\n")
         self.log_signal.emit(f"🔧 Loader: {os.path.basename(self.loader_path)}")
         self.log_signal.emit(f"💾 Memory: {self.memory_type}")
-        self.log_signal.emit(f"📦 Số bước: {total}\n")
+        self.log_signal.emit(f"📦 Steps: {total}\n")
 
         for i, step in enumerate(self.steps):
             if self._cancelled:
-                self.log_signal.emit("\n✖ Đã hủy bởi người dùng.")
-                self.finished_signal.emit(False, "Đã hủy.")
+                self.log_signal.emit("\n✖ Cancelled by the user.")
+                self.finished_signal.emit(False, "Cancelled.")
                 return
 
-            name = step.get("name", f"Bước {i+1}")
+            name = step.get("name", f"Step {i+1}")
             mode = step.get("mode", "partition")
 
             if mode == "xml":
@@ -182,7 +182,7 @@ class EdlWorker(QThread):
                 cmd = self._build_partition_cmd(step)
 
             if not cmd:
-                self.log_signal.emit(f"   ✖ Không thể tạo lệnh cho bước '{name}'")
+                self.log_signal.emit(f"   ✖ Could not build command for step '{name}'")
                 self.step_signal.emit(i, self.FAILED)
                 continue
 
@@ -199,26 +199,26 @@ class EdlWorker(QThread):
                 rc = self._stream_output(self._proc)
 
                 if rc == 0:
-                    self.log_signal.emit(f"   ✔ Thành công\n")
+                    self.log_signal.emit(f"   ✔ Success\n")
                     self.step_signal.emit(i, self.SUCCESS)
                 else:
-                    self.log_signal.emit(f"   ✖ Thất bại (mã {rc})\n")
+                    self.log_signal.emit(f"   ✖ Failed (code {rc})\n")
                     self.step_signal.emit(i, self.FAILED)
-                    # Tiếp tục bước tiếp theo (EDL flash thường không dừng giữa chừng)
+                    # Continue with the next step (EDL flashing usually does not stop midway)
 
             except Exception as e:
-                self.log_signal.emit(f"   ✖ Lỗi: {e}\n")
+                self.log_signal.emit(f"   ✖ Error: {e}\n")
                 self.step_signal.emit(i, self.FAILED)
 
             self.progress_signal.emit(int((i + 1) * 100 / total))
 
-        # Kiểm tra có bước nào failed không
-        self.log_signal.emit("═══ HOÀN TẤT EDL FLASH ═══")
-        self.finished_signal.emit(True, "EDL Flash hoàn tất!")
+        # Check whether any step failed
+        self.log_signal.emit("═══ EDL FLASH COMPLETE ═══")
+        self.finished_signal.emit(True, "EDL Flash completed!")
 
 
 class EdlResetWorker(QThread):
-    """Worker reset thiết bị sau khi flash EDL."""
+    """Worker that resets the device after EDL flashing."""
     log_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str)
 
@@ -230,10 +230,10 @@ class EdlResetWorker(QThread):
     def run(self):
         base_cmd = build_edl_cmd(self.edl_path)
         if not base_cmd:
-            self.finished_signal.emit(False, "EDL tool không khả dụng.")
+            self.finished_signal.emit(False, "EDL tool is not available.")
             return
 
-        self.log_signal.emit("🔄 Đang reset thiết bị...")
+        self.log_signal.emit("🔄 Resetting device...")
         cmd = base_cmd + ["reset"]
         if self.loader_path:
             cmd += ["--loader", self.loader_path]
@@ -245,12 +245,12 @@ class EdlResetWorker(QThread):
                 startupinfo=get_startup_info(), timeout=30
             )
             if result.returncode == 0:
-                self.log_signal.emit("✔ Đã gửi lệnh reset.")
-                self.finished_signal.emit(True, "Thiết bị đang khởi động lại.")
+                self.log_signal.emit("✔ Reset command sent.")
+                self.finished_signal.emit(True, "Device is rebooting.")
             else:
-                err = result.stderr.strip() or result.stdout.strip() or "Lỗi không xác định"
+                err = result.stderr.strip() or result.stdout.strip() or "Unknown error"
                 self.log_signal.emit(f"⚠ {err}")
                 self.finished_signal.emit(False, err)
         except Exception as e:
-            self.log_signal.emit(f"✖ Lỗi: {e}")
+            self.log_signal.emit(f"✖ Error: {e}")
             self.finished_signal.emit(False, str(e))

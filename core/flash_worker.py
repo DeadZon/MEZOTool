@@ -10,11 +10,11 @@ class FlashWorker(QThread):
     step_signal = pyqtSignal(int, int)   # (index, status)
     progress_signal = pyqtSignal(int)
     finished_signal = pyqtSignal(bool, str)
-    ask_continue_signal = pyqtSignal(str)  # Hỏi user khi flash lỗi
+    ask_continue_signal = pyqtSignal(str)  # Ask the user when flashing fails
 
     PENDING, RUNNING, SUCCESS, FAILED = 0, 1, 2, 3
 
-    # Chu kỳ flush log (giây) — gộp nhiều dòng rồi emit 1 lần
+    # Log flush interval in seconds - batch multiple lines into one emit
     LOG_FLUSH_INTERVAL = 0.15
 
     def __init__(self, manager: ADBFastbootManager, steps, serial=None):
@@ -26,12 +26,12 @@ class FlashWorker(QThread):
         self._cancelled = False
         self._continue_event = threading.Event()
         self._continue_answer = False
-        # Buffer cho batch log
+        # Batch log buffer
         self._log_buffer = []
         self._log_lock = threading.Lock()
 
     def reply_continue(self, yes: bool):
-        """UI gọi method này để trả lời có tiếp tục flash hay không."""
+        """The UI calls this method to answer whether flashing should continue."""
         self._continue_answer = yes
         self._continue_event.set()
 
@@ -44,7 +44,7 @@ class FlashWorker(QThread):
                 pass
 
     def _flush_log(self):
-        """Gửi toàn bộ log buffer ra UI, gộp thành 1 lần emit."""
+        """Send the full log buffer to the UI as one emit."""
         with self._log_lock:
             if not self._log_buffer:
                 return
@@ -53,14 +53,14 @@ class FlashWorker(QThread):
         self.log_signal.emit(batch)
 
     def _buffered_log(self, text):
-        """Thêm dòng log vào buffer. Sẽ được flush theo chu kỳ."""
+        """Add a log line to the buffer. It will be flushed on an interval."""
         with self._log_lock:
             self._log_buffer.append(text)
 
     def _stream_output(self, proc):
-        """Đọc stdout và stderr real-time từ process.
-        Fastboot ghi output chính ra stderr, nên cần đọc cả hai.
-        Sử dụng batch logging để giảm tải cho UI thread."""
+        """Read process stdout and stderr in real time.
+        Fastboot writes primary output to stderr, so both streams must be read.
+        Batch logging reduces UI thread load."""
 
         output_lines = []
         errors = []
@@ -86,7 +86,7 @@ class FlashWorker(QThread):
         stdout_thread.start()
         stderr_thread.start()
 
-        # Chờ process kết thúc, flush log theo chu kỳ
+        # Wait for the process to finish and flush logs on an interval
         while proc.poll() is None:
             self._flush_log()
             time.sleep(self.LOG_FLUSH_INTERVAL)
@@ -99,29 +99,29 @@ class FlashWorker(QThread):
 
         stdout_thread.join(timeout=5)
         stderr_thread.join(timeout=5)
-        # Flush log còn lại sau khi process kết thúc
+        # Flush remaining logs after the process exits
         self._flush_log()
 
         return proc.returncode if proc.returncode is not None else -1
 
     def run(self):
         if not self.steps:
-            self.finished_signal.emit(False, "Không có bước flash nào.")
+            self.finished_signal.emit(False, "No flash steps.")
             return
         if not self.manager.is_available():
-            self.finished_signal.emit(False, "ADB/Fastboot không khả dụng.")
+            self.finished_signal.emit(False, "ADB/Fastboot is not available.")
             return
 
         total = len(self.steps)
-        self.log_signal.emit("═══ BẮT ĐẦU FLASH ═══\n")
+        self.log_signal.emit("═══ STARTING FLASH ═══\n")
 
         for i, step in enumerate(self.steps):
             if self._cancelled:
-                self.log_signal.emit("\n✖ Đã hủy bởi người dùng.")
-                self.finished_signal.emit(False, "Đã hủy.")
+                self.log_signal.emit("\n✖ Cancelled by the user.")
+                self.finished_signal.emit(False, "Cancelled.")
                 return
 
-            name = step.get("name", f"Bước {i+1}")
+            name = step.get("name", f"Step {i+1}")
             exe = self.manager.adb_path if step.get("type") == "ADB" else self.manager.fastboot_path
             args = list(step.get("args", []))
 
@@ -134,7 +134,7 @@ class FlashWorker(QThread):
             self.step_signal.emit(i, self.RUNNING)
 
             try:
-                # Tạo process với stdout và stderr riêng để stream real-time
+                # Create a process with separate stdout and stderr streams for real-time output.
                 self._proc = subprocess.Popen(
                     cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                     text=True, encoding='utf-8', errors='ignore',
@@ -144,39 +144,39 @@ class FlashWorker(QThread):
                 rc = self._stream_output(self._proc)
 
                 if rc == 0:
-                    self.log_signal.emit(f"   ✔ Thành công\n")
+                    self.log_signal.emit(f"   ✔ Success\n")
                     self.step_signal.emit(i, self.SUCCESS)
                 else:
-                    self.log_signal.emit(f"   ✖ Thất bại (mã {rc})\n")
+                    self.log_signal.emit(f"   ✖ Failed (code {rc})\n")
                     self.step_signal.emit(i, self.FAILED)
-                    # Hỏi user có muốn tiếp tục không (timeout 5 phút)
+                    # Ask whether the user wants to continue (5 minute timeout)
                     self._continue_event.clear()
                     self.ask_continue_signal.emit(name)
                     if not self._continue_event.wait(timeout=300):
-                        # Timeout → dừng flash
-                        self.log_signal.emit("   ⏱ Timeout: không có phản hồi, dừng flash.\n")
-                        self.finished_signal.emit(False, f"Timeout tại bước '{name}'")
+                        # Timeout -> stop flashing.
+                        self.log_signal.emit("   ⏱ Timeout: no response, stopping flash.\n")
+                        self.finished_signal.emit(False, f"Timeout at step '{name}'")
                         return
                     if not self._continue_answer:
-                        self.finished_signal.emit(False, f"Dừng tại bước '{name}' (mã {rc})")
+                        self.finished_signal.emit(False, f"Stopped at step '{name}' (code {rc})")
                         return
-                    self.log_signal.emit(f"   ▶ Tiếp tục flash...\n")
+                    self.log_signal.emit(f"   ▶ Continuing flash...\n")
             except Exception as e:
-                self.log_signal.emit(f"   ✖ Lỗi: {e}\n")
+                self.log_signal.emit(f"   ✖ Error: {e}\n")
                 self.step_signal.emit(i, self.FAILED)
-                # Hỏi user có muốn tiếp tục không (timeout 5 phút)
+                # Ask whether the user wants to continue (5 minute timeout)
                 self._continue_event.clear()
                 self.ask_continue_signal.emit(name)
                 if not self._continue_event.wait(timeout=300):
-                    self.log_signal.emit("   ⏱ Timeout: không có phản hồi, dừng flash.\n")
-                    self.finished_signal.emit(False, f"Timeout tại bước '{name}'")
+                    self.log_signal.emit("   ⏱ Timeout: no response, stopping flash.\n")
+                    self.finished_signal.emit(False, f"Timeout at step '{name}'")
                     return
                 if not self._continue_answer:
                     self.finished_signal.emit(False, str(e))
                     return
-                self.log_signal.emit(f"   ▶ Tiếp tục flash...\n")
+                self.log_signal.emit(f"   ▶ Continuing flash...\n")
 
             self.progress_signal.emit(int((i + 1) * 100 / total))
 
-        self.log_signal.emit("═══ HOÀN TẤT ═══")
-        self.finished_signal.emit(True, "Flash hoàn tất thành công!")
+        self.log_signal.emit("═══ COMPLETE ═══")
+        self.finished_signal.emit(True, "Flash completed successfully!")
