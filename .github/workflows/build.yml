@@ -1,4 +1,4 @@
-name: Build MEZO Flash Tool
+name: Build DeadZone Flash Tool
 
 on:
   push:
@@ -17,32 +17,32 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: NTFlashTools-Windows
-            exe_name: NTFlashTools.exe
+            artifact_name: DeadZone-Windows
+            exe_name: DeadZone.exe
             platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-windows.zip
             scrcpy_arch: win64
             scrcpy_ext: zip
             separator: ";"
 
           - os: ubuntu-latest
-            artifact_name: NTFlashTools-Linux
-            exe_name: NTFlashTools
+            artifact_name: DeadZone-Linux
+            exe_name: DeadZone
             platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-linux.zip
             scrcpy_arch: linux-x86_64
             scrcpy_ext: tar.gz
             separator: ":"
 
           - os: macos-latest
-            artifact_name: NTFlashTools-macOS-arm64
-            exe_name: NTFlashTools
+            artifact_name: DeadZone-macOS-arm64
+            exe_name: DeadZone
             platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
             scrcpy_arch: macos-aarch64
             scrcpy_ext: tar.gz
             separator: ":"
 
           - os: macos-15-intel
-            artifact_name: NTFlashTools-macOS-x64
-            exe_name: NTFlashTools
+            artifact_name: DeadZone-macOS-x64
+            exe_name: DeadZone
             platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
             scrcpy_arch: macos-x86_64
             scrcpy_ext: tar.gz
@@ -91,7 +91,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          python -m PyInstaller --noconfirm --onefile --name NTFlashTools --noconsole --add-data "${{ steps.qfw.outputs.path }}${{ matrix.separator }}qfluentwidgets" --add-data "${{ steps.dd.outputs.path }}${{ matrix.separator }}darkdetect" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import PyQt6.QtSvg --hidden-import PyQt6.QtSvgWidgets --hidden-import qfluentwidgets --hidden-import darkdetect --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module doctest --exclude-module lib2to3 --exclude-module matplotlib --exclude-module numpy --exclude-module pandas --exclude-module scipy app.py
+          python -m PyInstaller --noconfirm --onefile --name DeadZone --noconsole --add-data "${{ steps.qfw.outputs.path }}${{ matrix.separator }}qfluentwidgets" --add-data "${{ steps.dd.outputs.path }}${{ matrix.separator }}darkdetect" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import PyQt6.QtSvg --hidden-import PyQt6.QtSvgWidgets --hidden-import qfluentwidgets --hidden-import darkdetect --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module doctest --exclude-module lib2to3 --exclude-module matplotlib --exclude-module numpy --exclude-module pandas --exclude-module scipy app.py
 
       # Download platform-tools for each OS
       - name: Download platform-tools
@@ -121,7 +121,7 @@ jobs:
 
           # Get the latest release from the GitHub API
           api_url = "https://api.github.com/repos/Genymobile/scrcpy/releases/latest"
-          headers = {"User-Agent": "NTFlashTools-CI"}
+          headers = {"User-Agent": "DeadZone-CI"}
           if token:
               headers["Authorization"] = f"Bearer {token}"
           req = urllib.request.Request(api_url, headers=headers)

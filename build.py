@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-MEZO Flash Tool — Build Script (Cross-platform)
+DeadZone Flash Tool — Build Script (Cross-platform)
+Developer: MEZO
 ================================================
 Package the application into executables for Windows, Linux, and macOS.
 
@@ -21,7 +22,7 @@ import platform
 
 
 # ── Configuration ──
-APP_NAME = "NTFlashTools"
+APP_NAME = "DeadZone"
 ENTRY = "app.py"
 ICON_WIN = None     # Set the .ico icon path if available, e.g. "assets/icon.ico"
 ICON_MAC = None     # Set the .icns icon path if available
@@ -191,7 +192,8 @@ def main():
     mode = "one-file" if onefile else "one-folder"
 
     print(f"╔══════════════════════════════════════════╗")
-    print(f"║  MEZO Flash Tool — Build ({os_name})      ║")
+    print(f"║  DeadZone Flash Tool — Build ({os_name}) ║")
+    print(f"║  Developer: MEZO                         ║")
     print(f"║  Mode: {mode:<33}║")
     print(f"╚══════════════════════════════════════════╝")
     print()

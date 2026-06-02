@@ -23,7 +23,7 @@ class MainWindow(FluentWindow):
         setTheme(t)
 
         # Window
-        self.setWindowTitle("MEZO Flash Tool")
+        self.setWindowTitle("DeadZone Flash Tool")
         self.resize(1150, 750)
         self.setMinimumSize(950, 620)
         screen = QApplication.primaryScreen().availableGeometry()

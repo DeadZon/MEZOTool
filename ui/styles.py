@@ -1,4 +1,4 @@
-"""Theme-aware styles for MEZO Flash Tool."""
+"""Theme-aware styles for DeadZone Flash Tool."""
 from qfluentwidgets import isDarkTheme
 
 

@@ -37,7 +37,7 @@ class DriverInstallThread(QThread):
             self.progress_signal.emit(10)
 
             req = urllib.request.Request(DRIVER_INF_URL, headers={
-                "User-Agent": "NTFlashTools/1.0"
+                "User-Agent": "DeadZoneFlashTool/1.0"
             })
             with urllib.request.urlopen(req, timeout=60) as resp:
                 total = int(resp.headers.get("Content-Length", 0))
@@ -173,7 +173,7 @@ class DriverPage(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(14)
 
-        layout.addWidget(TitleLabel("Settings USB Driver"))
+        layout.addWidget(TitleLabel("USB Driver"))
 
         # ── Information ──
         info_card = SimpleCardWidget()
