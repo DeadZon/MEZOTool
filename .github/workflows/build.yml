@@ -1,0 +1,267 @@
+name: Build NTFlashTools
+
+on:
+  push:
+    tags:
+      - 'v*'           # Tự động build khi push tag vd: v1.0.0
+  workflow_dispatch:     # Cho phép chạy thủ công từ GitHub UI
+    inputs:
+      release_tag:
+        description: 'Tag cho Release (vd: v1.0.0). Để trống = không tạo release.'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: NTFlashTools-Windows
+            exe_name: NTFlashTools.exe
+            platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-windows.zip
+            scrcpy_arch: win64
+            scrcpy_ext: zip
+            separator: ";"
+
+          - os: ubuntu-latest
+            artifact_name: NTFlashTools-Linux
+            exe_name: NTFlashTools
+            platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-linux.zip
+            scrcpy_arch: linux-x86_64
+            scrcpy_ext: tar.gz
+            separator: ":"
+
+          - os: macos-latest
+            artifact_name: NTFlashTools-macOS-arm64
+            exe_name: NTFlashTools
+            platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
+            scrcpy_arch: macos-aarch64
+            scrcpy_ext: tar.gz
+            separator: ":"
+
+          - os: macos-15-intel
+            artifact_name: NTFlashTools-macOS-x64
+            exe_name: NTFlashTools
+            platform_tools_url: https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
+            scrcpy_arch: macos-x86_64
+            scrcpy_ext: tar.gz
+            separator: ":"
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6 PyQt6-Fluent-Widgets darkdetect pyinstaller
+
+      # Linux: cài thư viện GUI cần thiết
+      - name: Install Linux GUI deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-xinerama0 libxcb-cursor0 libegl1 libxkbcommon0
+
+      - name: Get qfluentwidgets path
+        id: qfw
+        shell: python
+        run: |
+          import os, qfluentwidgets
+          path = os.path.dirname(qfluentwidgets.__file__)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"path={path}\n")
+
+      - name: Get darkdetect path
+        id: dd
+        shell: python
+        run: |
+          import os, darkdetect
+          path = os.path.dirname(darkdetect.__file__)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"path={path}\n")
+
+      - name: Build with PyInstaller
+        run: |
+          python -m PyInstaller --noconfirm --onefile --name NTFlashTools --noconsole --add-data "${{ steps.qfw.outputs.path }}${{ matrix.separator }}qfluentwidgets" --add-data "${{ steps.dd.outputs.path }}${{ matrix.separator }}darkdetect" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import PyQt6.QtSvg --hidden-import PyQt6.QtSvgWidgets --hidden-import qfluentwidgets --hidden-import darkdetect --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module doctest --exclude-module lib2to3 --exclude-module matplotlib --exclude-module numpy --exclude-module pandas --exclude-module scipy app.py
+
+      # Tải platform-tools cho mỗi OS
+      - name: Download platform-tools
+        shell: python
+        run: |
+          import urllib.request, zipfile, os
+          url = "${{ matrix.platform_tools_url }}"
+          zip_path = "platform-tools.zip"
+          print(f"Downloading {url}...")
+          urllib.request.urlretrieve(url, zip_path)
+          with zipfile.ZipFile(zip_path, 'r') as z:
+              z.extractall("dist")
+          os.remove(zip_path)
+          print("Done!")
+
+      # Tải scrcpy latest cho mỗi OS — dùng tag_name để tạo tên file chính xác
+      - name: Download scrcpy
+        shell: python
+        env:
+          GH_TOKEN: ${{ secrets.TOKEN }}
+        run: |
+          import urllib.request, json, os, zipfile, tarfile, shutil
+
+          arch = "${{ matrix.scrcpy_arch }}"
+          ext = "${{ matrix.scrcpy_ext }}"
+          token = os.environ.get("GH_TOKEN", "")
+
+          # Lấy latest release từ GitHub API
+          api_url = "https://api.github.com/repos/Genymobile/scrcpy/releases/latest"
+          headers = {"User-Agent": "NTFlashTools-CI"}
+          if token:
+              headers["Authorization"] = f"Bearer {token}"
+          req = urllib.request.Request(api_url, headers=headers)
+          with urllib.request.urlopen(req) as resp:
+              release = json.loads(resp.read().decode())
+
+          tag = release.get("tag_name", "")
+          print(f"Scrcpy latest tag: {tag}")
+
+          # Tạo tên file từ tag_name: scrcpy-{arch}-{tag}.{ext}
+          # Ví dụ: scrcpy-win64-v4.0.zip, scrcpy-macos-aarch64-v4.0.tar.gz
+          if ext == "tar.gz":
+              asset_name = f"scrcpy-{arch}-{tag}.tar.gz"
+          else:
+              asset_name = f"scrcpy-{arch}-{tag}.{ext}"
+
+          # Tìm asset trong release
+          download_url = None
+          for asset in release.get("assets", []):
+              if asset["name"] == asset_name:
+                  download_url = asset["browser_download_url"]
+                  break
+
+          if not download_url:
+              print(f"WARNING: Không tìm thấy asset '{asset_name}'")
+              print(f"Available assets: {[a['name'] for a in release.get('assets', [])]}")
+              # Không fail build, scrcpy là optional
+              exit(0)
+
+          print(f"Downloading {asset_name}...")
+          urllib.request.urlretrieve(download_url, asset_name)
+
+          # Giải nén
+          scrcpy_dir = os.path.join("dist", "scrcpy")
+          os.makedirs(scrcpy_dir, exist_ok=True)
+
+          if ext == "zip":
+              with zipfile.ZipFile(asset_name, 'r') as z:
+                  for member in z.namelist():
+                      filename = os.path.basename(member)
+                      if not filename:
+                          continue
+                      with z.open(member) as source:
+                          with open(os.path.join(scrcpy_dir, filename), "wb") as target:
+                              shutil.copyfileobj(source, target)
+          else:
+              with tarfile.open(asset_name, 'r:gz') as tar:
+                  for member in tar.getmembers():
+                      if member.isfile():
+                          member.name = os.path.basename(member.name)
+                          tar.extract(member, scrcpy_dir)
+
+          os.remove(asset_name)
+          print(f"Scrcpy {tag} extracted to dist/scrcpy/")
+          print(f"Files: {os.listdir(scrcpy_dir)}")
+
+      # Linux/macOS: chmod +x
+      - name: Set executable permissions
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x dist/${{ matrix.exe_name }}
+          chmod +x dist/platform-tools/adb
+          chmod +x dist/platform-tools/fastboot
+          if [ -f dist/scrcpy/scrcpy ]; then
+            chmod +x dist/scrcpy/scrcpy
+          fi
+
+      # Copy config.json
+      - name: Copy config
+        shell: python
+        run: |
+          import shutil, os
+          if os.path.exists("config.json"):
+              shutil.copy2("config.json", "dist/config.json")
+
+      # Debug: liệt kê nội dung dist
+      - name: List dist contents
+        run: |
+          echo "=== dist/ contents ==="
+          ls -R dist/ || dir /s dist\
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/
+          retention-days: 30
+
+  # ── Tạo Release ──
+  # Chạy khi push tag HOẶC workflow_dispatch có nhập release_tag
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: >-
+      startsWith(github.ref, 'refs/tags/')
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Determine tag
+        id: tag
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+          fi
+          echo "Release tag: $(cat $GITHUB_OUTPUT)"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Artifact structure ==="
+          ls -R artifacts/
+
+      - name: Create ZIP packages
+        run: |
+          cd artifacts
+          for dir in */; do
+            name="${dir%/}"
+            echo "Creating ${name}.zip..."
+            cd "$name"
+            zip -r "../../${name}.zip" .
+            cd ..
+          done
+          cd ..
+          echo "=== ZIP files ==="
+          ls -la *.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Release ${{ steps.tag.outputs.tag }}"
+          files: "*.zip"
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
